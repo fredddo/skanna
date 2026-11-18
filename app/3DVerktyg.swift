@@ -27,6 +27,9 @@ final class Leaf {
     }
 }
 
+/// Mätetikettens nod och vad den ska hålla sig undan (världskoordinater) – storlek i skärmpunkter.
+struct MatEtikett { let node: SCNNode; let a: V3; let b: V3?; let w: Float; let h: Float }
+
 struct EdgeRef { let leaf: Leaf; let edge: EdgeData; let px: Float; let local: V3 }
 struct SnapPick { let kind: String; let leaf: Leaf; let local: V3; let px: Float; let edge: Int?; let face: Int?; let normal: V3? }
 struct HitInfo { let world: V3; let node: SCNNode; let leafId: String?; let del: String?; let face: Int?; let normal: V3? }
@@ -432,6 +435,7 @@ extension ModelView.Coordinator {
         measureNode.removeFromParentNode()
         measureNode = SCNNode()
         scaled = []
+        matEtikett = nil
         guard let m = run?.matning else { return }
         let red = NSColor(calibratedRed: 0.9, green: 0.1, blue: 0.15, alpha: 1)
         func mat(_ c: NSColor) -> SCNMaterial { let x = SCNMaterial(); x.diffuse.contents = c; x.lightingModel = .constant; x.readsFromDepthBuffer = false; x.isDoubleSided = true; return x }
@@ -443,6 +447,7 @@ extension ModelView.Coordinator {
         let a = f3(m.a.pos) + offset(of: m.a)
         dot(a)
         var labelPos = a
+        var labelEnd: V3?
         if let tb = m.b {
             let b = f3(tb.pos) + offset(of: tb)
             var end = b
@@ -462,6 +467,7 @@ extension ModelView.Coordinator {
                 measureNode.addChildNode(n); scaled.append((n, -1.2))
             }
             labelPos = (a + end) / 2
+            labelEnd = end
         }
         let text = m.b == nil ? "Klicka på andra punkten" : m.text
         // etiketten som en bild (text + platta i ett), så att plattan alltid passar texten exakt
@@ -480,20 +486,50 @@ extension ModelView.Coordinator {
         let bg = SCNPlane(width: W * k, height: H * k)
         let bm = mat(.white); bm.diffuse.contents = img; bm.transparencyMode = .aOne; bg.materials = [bm]
         let bn = SCNNode(geometry: bg); bn.renderingOrder = 102
-        bn.position = SCNVector3(0, H * k / 2 + 3, 0)   // strax ovanför mätlinjens mitt
-        let holder = SCNNode(); holder.simdPosition = labelPos
+        let holder = SCNNode(); holder.simdPosition = labelPos   // läget sätts per bildruta (placeMeasureLabel)
         let inner = SCNNode(); inner.addChildNode(bn)
         holder.addChildNode(inner)
         holder.constraints = [SCNBillboardConstraint()]
         measureNode.addChildNode(holder); scaled.append((holder, 1.1))
+        matEtikett = MatEtikett(node: holder, a: a, b: labelEnd, w: Float(W * k * 1.1), h: Float(H * k * 1.1))
         setMarkMask(measureNode)
         overlay.addChildNode(measureNode)
         updateOverlayScale()
     }
 
+    /// Mätetiketten på skärmen: på linjen när linjen är lång nog att synas på båda sidor om etiketten,
+    /// annars bredvid linjen, så långt ut att rutan inte täcker mätpunkterna.
+    func placeMeasureLabel() {
+        guard let e = matEtikett, let v = view else { return }
+        let pa = v.projectPoint(sv(e.a))
+        let a2 = SIMD2<Float>(Float(pa.x), Float(pa.y))
+        var center = a2, depth = Float(pa.z)
+        var dir = SIMD2<Float>(0, 1)                          // ut från linjen (skärmens y uppåt)
+        var along: Float = 0
+        if let b = e.b {
+            let pb = v.projectPoint(sv(b))
+            let b2 = SIMD2<Float>(Float(pb.x), Float(pb.y))
+            center = (a2 + b2) / 2; depth = Float((pa.z + pb.z) / 2)
+            let d = b2 - a2
+            along = simd_length(d)
+            if along > 1 {
+                let u = d / along
+                // halva rutans utsträckning längs linjen: får den plats mellan punkterna med marginal → på linjen
+                let halfAlong = abs(u.x) * e.w / 2 + abs(u.y) * e.h / 2
+                if along / 2 > halfAlong + 22 { e.node.simdPosition = simd_float3(v3(v.unprojectPoint(SCNVector3(CGFloat(center.x), CGFloat(center.y), CGFloat(depth))))); return }
+                dir = SIMD2(-u.y, u.x)
+                if dir.y < 0 || (abs(dir.y) < 1e-3 && dir.x < 0) { dir = -dir }   // helst uppåt/höger
+            }
+        }
+        let halfOut = abs(dir.x) * e.w / 2 + abs(dir.y) * e.h / 2
+        let p = center + dir * (halfOut + 16)
+        e.node.simdPosition = v3(v.unprojectPoint(SCNVector3(CGFloat(p.x), CGFloat(p.y), CGFloat(depth))))
+    }
+
     /// Konstant skärmstorlek: en enhet i noden = `px` pixlar (negativt tal = bara tvärsnittet, för linjen).
     func updateOverlayScale() {
         guard let v = view, let pov = v.pointOfView else { return }
+        placeMeasureLabel()
         let cam = pov.simdWorldPosition
         let perPx = 2 * tan(Float(17 * Double.pi / 180)) / Float(max(v.bounds.height, 1))
         func s(_ n: SCNNode, _ px: Float) {

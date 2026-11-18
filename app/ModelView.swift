@@ -458,6 +458,7 @@ struct ModelView: NSViewRepresentable {
         var asmCenter = V3(0, 0, 0)
         let rit = RitTillstand()             // Rita.swift
         var cursorKey = ""
+        var matEtikett: MatEtikett?          // mätetiketten placeras per bildruta (3DVerktyg.swift)
 
         func sectionLabel() -> String {
             String(format: "Snitt: %@ = %@", ["X", "Y", "Z"][sectionAxis],
