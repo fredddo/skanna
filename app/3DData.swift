@@ -123,7 +123,92 @@ func loadPartData(_ url: URL) -> PartData? {
         if e.langd == nil { for i in 1..<n { len += Double(simd_length(pts[i] - pts[i - 1])) } }
         pd.edges.append(EdgeData(id: e.id, typ: e.typ ?? "spline", langd: len, radie: e.radie, centrum: vec(e.centrum), pts: pts, ytor: e.ytor ?? [], kropp: body))
     }
+    if pd.edges.isEmpty { pd.edges = deriveEdges(pd) }
     return pd
+}
+
+/// Id för kanter som appen själv har räknat fram (filen saknade "kanter"): inte index i solid.edges().
+let harleddKant = 1_000_000
+func kantNamn(_ id: Int) -> String { id >= harleddKant ? "kant" : "kant \(id)" }
+
+/// Kanter ur ytornas trianglar när ytor.json saknar "kanter" (äldre export): gränser mellan ytor där ytorna möts i en
+/// vinkel (≥ 12°), hopkedjade till polylinjer och delade vid skarpa hörn. Släta skarvar (t.ex. mellan små plan i en
+/// avrundning) blir inga kanter.
+func deriveEdges(_ pd: PartData) -> [EdgeData] {
+    func q(_ p: V3) -> SIMD3<Int32> { SIMD3(Int32((p.x * 100).rounded()), Int32((p.y * 100).rounded()), Int32((p.z * 100).rounded())) }
+    struct Seg { var a: V3; var b: V3; var n: [V3]; var faces: [Int]; var kropp: Int }
+    var segs: [String: Seg] = [:]
+    for id in pd.order {
+        guard let f = pd.faces[id] else { continue }
+        let n = f.v.count
+        var count: [UInt64: (Int, V3)] = [:]
+        for k in stride(from: 0, to: f.t.count - 2, by: 3) {
+            let a = Int(f.t[k]), b = Int(f.t[k + 1]), c = Int(f.t[k + 2])
+            guard a < n, b < n, c < n else { continue }
+            let cr = simd_cross(f.v[b] - f.v[a], f.v[c] - f.v[a])
+            let tn = simd_length(cr) > 1e-9 ? simd_normalize(cr) : V3(0, 0, 0)
+            for (x, y) in [(a, b), (b, c), (c, a)] {
+                let key = UInt64(UInt32(min(x, y))) << 32 | UInt64(UInt32(max(x, y)))
+                count[key] = ((count[key]?.0 ?? 0) + 1, tn)
+            }
+        }
+        for (key, (c, tn)) in count where c == 1 {
+            let pa = f.v[Int(key >> 32)], pb = f.v[Int(key & 0xffffffff)]
+            let qa = q(pa), qb = q(pb)
+            guard qa != qb else { continue }
+            let k = qa.x < qb.x || (qa.x == qb.x && (qa.y < qb.y || (qa.y == qb.y && qa.z < qb.z))) ? "\(qa)|\(qb)" : "\(qb)|\(qa)"
+            if var s = segs[k] { s.n.append(tn); s.faces.append(id); segs[k] = s } else { segs[k] = Seg(a: pa, b: pb, n: [tn], faces: [id], kropp: f.kropp) }
+        }
+    }
+    // behåll gränser med en vinkel mellan ytorna (eller öppna kanter)
+    let cosMax = Float(cos(12.0 * Double.pi / 180))
+    let kept = segs.values.filter { s in s.n.count < 2 || abs(simd_dot(s.n[0], s.n[1])) < cosMax || simd_length(s.n[0]) < 0.5 || simd_length(s.n[1]) < 0.5 }
+    // graf och kedjor
+    var adj: [SIMD3<Int32>: [Int]] = [:]
+    for (i, s) in kept.enumerated() { adj[q(s.a), default: []].append(i); adj[q(s.b), default: []].append(i) }
+    var used = [Bool](repeating: false, count: kept.count)
+    var chains: [(pts: [V3], faces: Set<Int>, kropp: Int)] = []
+    func walk(from start: Int, at v0: SIMD3<Int32>) -> (pts: [V3], faces: Set<Int>, kropp: Int) {
+        var s = kept[start]; used[start] = true
+        var pts = q(s.a) == v0 ? [s.a, s.b] : [s.b, s.a]
+        var faces = Set(s.faces)
+        var v = q(pts[1])
+        while let list = adj[v], list.count == 2, let nxt = list.first(where: { !used[$0] }) {
+            s = kept[nxt]; used[nxt] = true
+            let p = q(s.a) == v ? s.b : s.a
+            pts.append(p); faces.formUnion(s.faces); v = q(p)
+        }
+        return (pts, faces, kept[start].kropp)
+    }
+    for (v, list) in adj where list.count != 2 { for i in list where !used[i] { chains.append(walk(from: i, at: v)) } }
+    for i in kept.indices where !used[i] { chains.append(walk(from: i, at: q(kept[i].a))) }   // slutna slingor
+    // dela vid skarpa hörn (> 35°)
+    var out: [EdgeData] = []
+    let cosTurn = Float(cos(35.0 * Double.pi / 180))
+    func add(_ pts: [V3], _ faces: Set<Int>, _ kropp: Int) {
+        guard pts.count >= 2 else { return }
+        var len = 0.0
+        for i in 1..<pts.count { len += Double(simd_length(pts[i] - pts[i - 1])) }
+        guard len > 0.05 else { return }
+        let rak = pts.count == 2 || (1..<(pts.count - 1)).allSatisfy { i in
+            simd_length(simd_cross(simd_normalize(pts[pts.count - 1] - pts[0]), pts[i] - pts[0])) < 0.02 }
+        out.append(EdgeData(id: harleddKant + out.count, typ: rak ? "linje" : "kurva", langd: len, radie: nil, centrum: nil, pts: pts,
+                            ytor: faces.sorted(), kropp: kropp))
+    }
+    for c in chains {
+        var cur: [V3] = [c.pts[0]]
+        for i in 1..<c.pts.count {
+            cur.append(c.pts[i])
+            if i < c.pts.count - 1 {
+                let d1 = c.pts[i] - c.pts[i - 1], d2 = c.pts[i + 1] - c.pts[i]
+                if simd_length(d1) > 1e-6, simd_length(d2) > 1e-6, simd_dot(simd_normalize(d1), simd_normalize(d2)) < cosTurn {
+                    add(cur, c.faces, c.kropp); cur = [c.pts[i]]
+                }
+            }
+        }
+        add(cur, c.faces, c.kropp)
+    }
+    return out
 }
 
 // MARK: Formatering
@@ -368,7 +453,7 @@ enum Matt3D {
             rows.append(("Radie", "\(mm(r, 2)) mm"))
             rows.append(("Ø", "\(mm(2 * r, 2)) mm"))
         }
-        return Info(rubrik: "\(namn) · kant \(e.id) (\(e.typ))", rader: rows)
+        return Info(rubrik: "\(namn) · \(kantNamn(e.id)) (\(e.typ))", rader: rows)
     }
 
     /// Färdig mätning ur två träffar (modellens ram). Parallella plana ytor ger vinkelrätt avstånd.
@@ -380,7 +465,10 @@ enum Matt3D {
         if aPlan, bPlan, let na = a.normal, let nb = b.normal, simd_length(na) > 0.5, simd_length(nb) > 0.5 {
             let c = simd_dot(simd_normalize(na), simd_normalize(nb))
             angle = acos(max(-1, min(1, c))) * 180 / .pi
-            if abs(c) > 0.9999 { dist = abs(simd_dot(d, simd_normalize(na))); perp = true }
+            // vinkelrätt bara när ytorna är olika och sträckan går mest längs normalen – två klick längs samma plan
+            // (t.ex. ovansidans båda ändar) ska ge avståndet mellan punkterna, inte planens avstånd (≈ 0 eller Δz)
+            let along = abs(simd_dot(d, simd_normalize(na)))
+            if abs(c) > 0.9999, a.yta != b.yta || a.del != b.del, along > 0.05, along >= 0.7 * simd_length(d) { dist = along; perp = true }
         }
         var text = "\(mm(dist, 2)) mm"
         text += " (Δx \(mm(abs(d.x), 1)) · Δy \(mm(abs(d.y), 1)) · Δz \(mm(abs(d.z), 1)))"

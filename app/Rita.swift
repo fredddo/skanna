@@ -232,7 +232,7 @@ extension ModelView.Coordinator {
         if rit.markor.parent !== root { root.addChildNode(rit.markor) }
         rit.markor.simdPosition = f.pick.local + offset(of: f.pick.leaf)
         updateOverlayScale()
-        view?.toolTip = f.pick.kind == "hörn" ? "hörn" : f.edge.map { "\(partNames[$0.leaf.del] ?? $0.leaf.del) · kant \($0.edge.id)" }
+        view?.toolTip = f.pick.kind == "hörn" ? "hörn" : f.edge.map { "\(partNames[$0.leaf.del] ?? $0.leaf.del) · \(kantNamn($0.edge.id))" }
     }
 
     // MARK: Kamera och ritplan
@@ -286,7 +286,7 @@ extension ModelView.Coordinator {
             let s = v.projectPoint(sv(w))
             start = CGPoint(x: s.x, y: s.y)
             rit.start = RitFast(slag: f.pick.kind == "hörn" ? "hörn" : "kant", del: f.pick.leaf.del, objekt: f.pick.leaf.multi ? f.pick.leaf.id : nil,
-                                kant: f.pick.edge, punkt: dd(f.pick.local))
+                                kant: f.pick.edge.flatMap { $0 >= harleddKant ? nil : $0 }, punkt: dd(f.pick.local))
         }
         rit.aktiv = true
         rit.punkter = [start]

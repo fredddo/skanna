@@ -226,6 +226,17 @@ extension ModelView.Coordinator {
         return nil
     }
 
+    /// Mätpunkt under pekaren: hörn/kantmitt/centrum inom 5 px, annars närmaste punkt på en kant inom 8 px
+    /// (så att man kan mäta mellan t.ex. två böjda gavlars yttersta punkter), annars ytan.
+    func measureSnap(_ p: NSPoint) -> (pick: SnapPick, edge: EdgeRef?)? {
+        guard snapped == nil else { return nil }
+        if let s = pickSnap(p), s.px <= 5 { return (s, nil) }
+        if let e = pickEdge(p, maxPx: 8) {
+            return (SnapPick(kind: "på kanten", leaf: e.leaf, local: e.local, px: e.px, edge: e.edge.id, face: nil, normal: nil), e)
+        }
+        return nil
+    }
+
     // MARK: Hover (kant, fästpunkt)
 
     func setHoverEdge(_ e: EdgeRef?) {
@@ -271,12 +282,12 @@ extension ModelView.Coordinator {
         var edge: EdgeRef?
         var snap: SnapPick?
         if let p, snapped == nil {
-            if tool == .valj || tool == .peka { edge = pickEdge(p) } else if tool == .mat { snap = pickSnap(p) }
+            if tool == .valj || tool == .peka { edge = pickEdge(p) } else if tool == .mat, let m = measureSnap(p) { snap = m.pick; edge = m.edge }
         }
         setHoverEdge(edge)
         setSnapMarker(snap)
         var hit: SCNNode?
-        if let p, edge == nil, tool != .flytta {
+        if let p, edge == nil || tool == .mat, tool != .flytta {
             hit = v.hitTest(p, options: [.rootNode: partsRoot, .ignoreHiddenNodes: true, .categoryBitMask: 1]).first.flatMap { faceNode($0.node) }
         }
         if hit !== hovered {
@@ -284,11 +295,11 @@ extension ModelView.Coordinator {
             hovered = hit
             restyle(old); restyle(hit)
         }
-        if let e = edge {
-            let name = partNames[e.leaf.del] ?? e.leaf.del
-            v.toolTip = "\(name) · kant \(e.edge.id) · \(e.edge.typ) \(mm(e.edge.langd, 2)) mm"
-        } else if let s = snap {
+        if let s = snap {
             v.toolTip = s.kind
+        } else if let e = edge {
+            let name = partNames[e.leaf.del] ?? e.leaf.del
+            v.toolTip = "\(name) · \(kantNamn(e.edge.id)) · \(e.edge.typ) \(mm(e.edge.langd, 2)) mm"
         } else {
             v.toolTip = hit.flatMap { faceKey($0) }.flatMap { k in split(k).map { "\(partNames[$0.0] ?? $0.0) · yta \($0.1) · \(faceInfo[k] ?? "")" } }
         }
@@ -348,7 +359,7 @@ extension ModelView.Coordinator {
     }
 
     func selectEdge(_ e: EdgeRef) {
-        let t = Traff(slag: .kant, del: e.leaf.del, objekt: e.leaf.multi ? e.leaf.id : nil, kant: e.edge.id, pos: d3(e.local))
+        let t = Traff(slag: .kant, del: e.leaf.del, objekt: e.leaf.multi ? e.leaf.id : nil, kant: e.edge.id >= harleddKant ? nil : e.edge.id, pos: d3(e.local))
         commit(t, Matt3D.kant(namn: displayName(e.leaf), e.edge), part: e.leaf.del)
     }
 
@@ -387,8 +398,9 @@ extension ModelView.Coordinator {
     func handleMeasure(_ p: NSPoint, _ hits: [SCNHitTestResult]) {
         guard let run else { return }
         var t: Traff?
-        if snapped == nil, let s = pickSnap(p) {
-            t = Traff(slag: .punkt, del: s.leaf.del, objekt: s.leaf.multi ? s.leaf.id : nil, yta: s.face, kant: s.edge, pos: d3(s.local), normal: s.normal.map(d3))
+        if let s = measureSnap(p)?.pick {
+            t = Traff(slag: .punkt, del: s.leaf.del, objekt: s.leaf.multi ? s.leaf.id : nil, yta: s.face, kant: s.edge.flatMap { $0 >= harleddKant ? nil : $0 },
+                      pos: d3(s.local), normal: s.normal.map(d3))
         } else if let h = hits.first.map(decode) {
             if let id = h.leafId, let leaf = leaves[id] {
                 t = Traff(slag: .punkt, del: leaf.del, objekt: leaf.multi ? leaf.id : nil, yta: h.face, pos: d3(h.world - offset(of: leaf)), normal: h.normal.map(d3))
