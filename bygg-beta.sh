@@ -1,0 +1,52 @@
+#!/bin/zsh
+# Bygger "Skanna Beta.app" (med skanna-cli inuti) i ~/Applications. Rör inte den vanliga Skanna.app.
+set -e
+cd "$(dirname "$0")"
+HEM="$(pwd)"
+APP="$HOME/Applications/Skanna Beta.app"
+if pgrep -f "Skanna Beta.app/Contents/MacOS/skanna-cli" >/dev/null; then
+  echo "En skanning pågår i Skanna Beta – bygger inte om nu." >&2
+  exit 1
+fi
+BUILD=$(mktemp -d)
+swiftc -O -parse-as-library -o "$BUILD/skanna-cli" main.swift
+swiftc -O -parse-as-library -o "$BUILD/Skanna Beta" app/*.swift
+cp "$BUILD/skanna-cli" "$HEM/skanna"
+# Bygg den nya appen bredvid och byt plats – en Beta som körs stängs inte (den fortsätter med den gamla koden tills omstart).
+NEW="$APP.ny"
+rm -rf "$NEW"
+mkdir -p "$NEW/Contents/MacOS" "$NEW/Contents/Resources"
+cp "$BUILD/Skanna Beta" "$BUILD/skanna-cli" "$NEW/Contents/MacOS/"
+cp referensark.pdf "$NEW/Contents/Resources/"
+[[ -f app/AppIcon.icns ]] && cp app/AppIcon.icns "$NEW/Contents/Resources/"
+cat > "$NEW/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleExecutable</key><string>Skanna Beta</string>
+  <key>CFBundleIdentifier</key><string>local.skanna.beta</string>
+  <key>CFBundleName</key><string>Skanna Beta</string>
+  <key>CFBundleDisplayName</key><string>Skanna Beta</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>2.0</string>
+  <key>CFBundleVersion</key><string>$(date +%Y%m%d%H%M)</string>
+  <key>CFBundleDevelopmentRegion</key><string>sv</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>SkannaHem</key><string>$HEM</string>
+  <key>SkannaProjektmapp</key><string>Skanna</string>
+  <key>NSCameraUsageDescription</key><string>Skanna Beta använder iPhonen (Continuity Camera) eller en annan kamera för att ta stillbilder till skanningen.</string>
+  <key>NSCameraUseContinuityCameraDeviceType</key><true/>
+</dict></plist>
+PLIST
+codesign --force --deep -s - "$NEW" >/dev/null 2>&1
+OLD="$BUILD/gammal.app"
+[[ -d "$APP" ]] && mv "$APP" "$OLD"
+mv "$NEW" "$APP"
+if pgrep -f "Skanna Beta.app/Contents/MacOS/Skanna Beta" >/dev/null; then
+  echo "OBS: Skanna Beta körs – starta om den för att få den nya versionen."
+else
+  rm -rf "$BUILD"
+fi
+echo "Byggt: $APP (hem: $HEM)"

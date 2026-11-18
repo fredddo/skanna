@@ -1,0 +1,10 @@
+build123d
+trimesh
+numpy
+scipy
+shapely
+matplotlib
+opencv-python-headless
+pillow
+pillow-heif
+lib3mf

@@ -1,0 +1,9 @@
+# Python-miljön (skapa med: uv venv --python 3.12 .venv && uv pip install -r requirements.txt)
+.venv/
+__pycache__/
+*.pyc
+# byggt CLI (görs av bygg-beta.sh)
+/skanna
+# första versionen (v1) hör inte hit
+/gammal/
+.DS_Store
