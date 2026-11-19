@@ -58,7 +58,8 @@ prj.spara(beskrivning="…", fragor=[{"id": "faste-hal", "text": "…", "markeri
 - Alla mått användaren ska kunna ändra ska ligga i `prj.parametrar(...)`. Appen skriver ändringar till
   `parametrar-anvandare.json` (källa blir `användare`) och skickar ett svar med `fraga_id: "parameter"`.
 - `prj.spara` skriver bara den egna gruppens mått och frågor (fältet `grupp`) – flera skript samsas om `geometri.json`.
-- Äldre skanningar utan `cad/skript/` men med `modell-cad.step` byggs med `cad/bygg_alla.sh` (HiKOKI-projektet).
+- Äldre skanningar med `modell-cad.step` byggs först med `bygg_alla.sh` (HiKOKI-projektet), därefter körs ev. del-skript i
+  `cad/skript/` (t.ex. en mall eller import som användaren lagt till).
   Flytta gärna sådana skript in i `cad/skript/` när du ändå arbetar med dem.
 
 ### Importerade delar (`cad/import/`, `cad/skript/50-import-<id>.py`)

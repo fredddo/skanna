@@ -179,11 +179,6 @@ extension Runner {
             return []
         }
         let fm = FileManager.default
-        // äldre skanning som byggs med modell-cad.step: ett del-skript skulle ta över bygget
-        if scripts.isEmpty, fm.fileExists(atPath: cad.appendingPathComponent("modell-cad.step").path) {
-            toast = "Det här äldre projektet byggs på det gamla sättet (modell-cad.step) – be Claude flytta skripten till cad/skript/ först"
-            return []
-        }
         let importDir = cad.appendingPathComponent("import", isDirectory: true)
         do {
             try fm.createDirectory(at: importDir, withIntermediateDirectories: true)
