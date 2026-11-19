@@ -59,6 +59,11 @@ struct Workspace: View {
                 Button { run.redo() } label: { Image(systemName: "arrow.uturn.forward") }
                     .disabled(!run.canRedo).help(run.redoName.map { "Gör om \($0) (⇧⌘Z)" } ?? "Inget att göra om (⇧⌘Z)")
             }
+            Button { run.visaHistorik = true } label: {
+                Image(systemName: "clock.arrow.circlepath").foregroundStyle(run.historikPa ? Color.primary : Color.orange)
+            }
+            .help(run.historikPa ? "Historik: \(run.historik.count) versioner i git – gå tillbaka till en tidigare (⌘Y)"
+                                 : "Historik (⌘Y): projektet sparas inte i git – ingen historik mellan omstarter")
             Button { run.rebuild() } label: { Label("Bygg om", systemImage: "hammer") }
                 .disabled(!run.canEdit || run.rebuilding).help("Kör del-skripten igen (⌘B)")
             Menu {

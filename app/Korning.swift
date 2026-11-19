@@ -39,10 +39,12 @@ extension Runner {
         if panel.runModal() == .OK { add(panel.urls) }
     }
 
-    /// Ny skanning från video/fotomapp: resultatet hamnar bredvid första klippet som <namn>.modell.
+    /// Ny skanning från video/fotomapp: resultatet hamnar i projektmappen (inställning) eller bredvid första klippet, som <namn>.modell.
     func start() {
         guard !clips.isEmpty, !running else { return }
-        let base = clips[0].deletingPathExtension()
+        let iRot = UserDefaults.standard.object(forKey: "skanningarIProjektmappen") as? Bool ?? true
+        if iRot { try? FileManager.default.createDirectory(at: Hem.projektRot, withIntermediateDirectories: true) }
+        let base = iRot ? Hem.projektRot.appendingPathComponent(clips[0].deletingPathExtension().lastPathComponent) : clips[0].deletingPathExtension()
         var out = base.appendingPathExtension("modell")
         var n = 2
         while FileManager.default.fileExists(atPath: out.path) { out = base.appendingPathExtension("modell-\(n)"); n += 1 }

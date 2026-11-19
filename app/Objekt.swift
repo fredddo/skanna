@@ -37,6 +37,7 @@ extension Runner {
         let old = parts.first { $0.id == id }?.namn ?? id
         guard n != old else { return }
         if n.isEmpty { egnaNamn[id] = nil } else { egnaNamn[id] = n }
+        historikNotera("Bytte namn: \(old) → \(n.isEmpty ? "Claudes namn" : n)")
         saveObjektVisning()
         reloadCad()
         send(questionID: "parameter", question: "Namn", text: "Bytte namn på delen \(id): \(old) → \(n.isEmpty ? "(Claudes namn)" : n) (i appen)", attachment: nil)
@@ -52,6 +53,7 @@ extension Runner {
         let t = order.firstIndex(of: target)!
         order.insert(id, at: from < to ? t + 1 : t)
         objektOrdning = order
+        historikNotera("Ändrad ordning i objektlistan")
         saveObjektVisning()
         parts = applyObjekt(parts)
     }

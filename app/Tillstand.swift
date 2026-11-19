@@ -31,7 +31,7 @@ final class Runner: ObservableObject {
 
     // MARK: Valt projekt
     @Published var output: URL? {
-        willSet { if newValue != output { flushUtskrift() } }   // väntande utskriftsmeddelande till rätt projekt
+        willSet { if newValue != output { flushUtskrift(); historikSpara(vanta: true) } }   // osparad historik till rätt projekt   // väntande utskriftsmeddelande till rätt projekt
         didSet { if output != oldValue { projectChanged() } }
     }
     @Published var model: URL?
@@ -107,11 +107,25 @@ final class Runner: ObservableObject {
     var undoTimer: Timer?
     var undoPaused = true          // av medan ett projekt laddas och medan ett läge återställs
 
+    // MARK: Historik i git (Historik.swift)
+    @Published var gitLage: GitLage = .okand
+    @Published var historik: [HistorikPost] = []
+    @Published var visaHistorik = false
+    var historikNamn: [String] = []      // vad som ändrats sedan senaste commit (blir rubriken)
+    var historikSenast: String?          // git status vid förra varvet – commit först när den legat still
+    var historikUpptagen = false
+    var claudeSett: String?              // senaste Claude-meddelandet som redan finns i en commit
+
     private var cadTimer: Timer?
+    private var historikTimer: Timer?
     private var pendingRebuild = false
 
     init() {
         cadTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reloadCad(onlyIfChanged: true) }
+        historikTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.historikTick() }
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.historikSpara(vanta: true)
+        }
         mallar = Mall.alla()
     }
 
@@ -165,6 +179,7 @@ final class Runner: ObservableObject {
         projekt = output.flatMap { try? Data(contentsOf: $0.appendingPathComponent("projekt.json")) }
             .flatMap { try? JSONDecoder().decode(ProjektFil.self, from: $0) }
         reloadCad()
+        uppdateraGitLage()
     }
 
     // MARK: Lokalt tillstånd (användarens mått och stängda frågor)

@@ -6,6 +6,12 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Var filerna sparas + historik i git:** i Inställningar (⌘,) väljer du projektmappen, och appen rekommenderar starkt
+  ett git-repo (knappen *Gör projektmappen till git-repo*). Nya videoskanningar hamnar också där om du vill.
+  I ett repo gör appen en commit när en ändring har satt sig – Claude har byggt färdigt, ett mått, ett namn,
+  projektbyte, när appen stängs. Bara `cad/` och `projekt.json` versioneras; bilder, video och mesh hålls utanför.
+  *Historik* (klockan i toppraden, ⌘Y) visar versionerna. *Gå tillbaka hit* gör en ny version, så inget skrivs över,
+  och samtalet med Claude ligger kvar. ⌘Z fungerar som förut för enskilda steg medan appen är öppen. Appen pushar aldrig.
 - **Modellera utan skanning:** *Nytt modellprojekt* (⌘N) från en mall (låda med lock, distans, vinkelfäste, vridskiva)
   eller tomt med en beskrivning till Claude. Det är samma objektträd, samma redigerbara mått, samma export till Bambu Studio och samma
   Claude-dialog som för skanningar.

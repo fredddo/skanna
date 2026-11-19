@@ -22,6 +22,7 @@ struct ContentView: View {
         .overlay(alignment: .bottom) { ToastView(run: run) }
         .sheet(isPresented: $run.showNewProject) { NewProjectSheet(run: run) }
         .sheet(isPresented: $run.showShortcuts) { ShortcutsSheet() }
+        .sheet(isPresented: $run.visaHistorik) { HistorikVy(run: run) }
         .onAppear {
             run.refreshScans()
             if !UserDefaults.standard.bool(forKey: "harSettValkommen") {
@@ -91,7 +92,7 @@ struct Sidebar: View {
                 if run.scans.isEmpty {
                     VStack(spacing: 6) {
                         Text("Inga projekt än").font(.callout)
-                        Text("Skapa ett med + ovan.\nVideo-skanningar hamnar bredvid klippet (t.ex. Hämtade filer/IMG_1234.modell), nya projekt i Dokument/\(Hem.projektRot.lastPathComponent).")
+                        Text("Skapa ett med + ovan.\nNya projekt hamnar i \(Hem.projektRot.path) (ändra i Inställningar, ⌘,).")
                             .multilineTextAlignment(.center).foregroundStyle(.secondary).font(.caption)
                     }.padding()
                 }
@@ -387,6 +388,7 @@ struct NewProjectSheet: View {
     @State private var name = ""
     @State private var mall: Mall?
     @State private var message = ""
+    @State private var rotUtanGit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -410,7 +412,10 @@ struct NewProjectSheet: View {
                 .font(.callout)
                 .frame(minHeight: 70)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
-            Text("Projektet sparas i \(Hem.projektRot.path).").font(.caption).foregroundStyle(.secondary)
+            Text("Projektet sparas i \(Hem.projektRot.path) (ändra i Inställningar, ⌘,).").font(.caption).foregroundStyle(.secondary)
+            if rotUtanGit {
+                Varning(text: "Projektmappen är inget git-repo – projektet får ingen historik mellan omstarter. Starkt rekommenderat: gör den till ett git-repo i Inställningar (⌘,).")
+            }
             HStack {
                 Spacer()
                 Button("Avbryt", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
@@ -425,7 +430,14 @@ struct NewProjectSheet: View {
         }
         .padding(20)
         .frame(width: 560)
-        .onAppear { run.mallar = Mall.alla() }
+        .onAppear {
+            run.mallar = Mall.alla()
+            let r = Hem.projektRot
+            DispatchQueue.global().async {
+                let utan = Git.finns && Git.rot(FileManager.default.fileExists(atPath: r.path) ? r : r.deletingLastPathComponent()) == nil
+                DispatchQueue.main.async { rotUtanGit = utan }
+            }
+        }
     }
 
     private func option(_ m: Mall?, _ title: String, _ text: String, _ icon: String) -> some View {
@@ -475,7 +487,7 @@ struct ShortcutsSheet: View {
     private let rows: [(String, String)] = [
         ("⌘N", "Nytt modellprojekt"), ("⇧⌘N", "Ny skanning från video"), ("⌥⌘N", "Guidad skanning"), ("⌘O", "Öppna mapp"),
         ("⌘Z · ⇧⌘Z", "Ångra / gör om (mått, fillet/fas, delar, visa/dölj, flytt, explode, opacitet, snitt, streck)"),
-        ("⌘B", "Bygg om delarna"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude"), ("⇧⌘R", "Visa projektet i Finder"),
+        ("⌘B", "Bygg om delarna"), ("⌘Y", "Historik (git)"), ("⌘,", "Inställningar: projektmapp och git"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude"), ("⇧⌘R", "Visa projektet i Finder"),
         ("⌘0", "Hela modellen (även dubbelklick)"), ("⌘1 … ⌘6", "Topp, fram, höger, bak, vänster, botten"), ("⌘7", "Perspektiv"),
         ("V · M · D · G · P", "Verktyg: Välj (mått på det du klickar), Mät, Rita, Flytta tillfälligt, Peka (ny chattråd)"),
         ("D, sedan dra", "Rita i vyn – starten fäster mot kanter; ⇧ = rak linje, mellanslag + dra = vrid, Esc = kasta ritningen"),

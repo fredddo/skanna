@@ -13,8 +13,13 @@ enum Hem {
     static var mallar: URL { url.appendingPathComponent("mallar", isDirectory: true) }
     static var agentProtokoll: URL { url.appendingPathComponent("AGENT.md") }
     /// Nya projekt (modellprojekt och guidade skanningar) hamnar här.
+    static var standardProjektRot: URL {
+        let name = (Bundle.main.object(forInfoDictionaryKey: "SkannaProjektmapp") as? String) ?? "Skanna"
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(name, isDirectory: true)
+    }
     static var projektRot: URL {
         if let s = ProcessInfo.processInfo.environment["SKANNA_PROJEKTROT"] { return URL(fileURLWithPath: s, isDirectory: true) }
+        if let s = UserDefaults.standard.string(forKey: "projektRot"), !s.isEmpty { return URL(fileURLWithPath: s, isDirectory: true) }
         let name = (Bundle.main.object(forInfoDictionaryKey: "SkannaProjektmapp") as? String) ?? "Skanna"
         return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(name, isDirectory: true)
     }

@@ -12,6 +12,7 @@ struct SkannaApp: App {
             ContentView(run: run).frame(minWidth: 1080, minHeight: 700)
         }
         .windowResizability(.contentMinSize)
+        Settings { InstallningarVy(run: run) }
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Nytt modellprojekt …") { run.showNewProject = true }.keyboardShortcut("n")
@@ -26,6 +27,7 @@ struct SkannaApp: App {
                 Button(run.redoName.map { "Gör om \($0)" } ?? "Gör om") { run.undoCommand(redo: true) }.keyboardShortcut("z", modifiers: [.command, .shift])
             }
             CommandMenu("Projekt") {
+                Button("Historik …") { run.visaHistorik = true }.keyboardShortcut("y").disabled(run.output == nil)
                 Button("Bygg om delarna") { run.rebuild() }.keyboardShortcut("b").disabled(!run.canEdit)
                 Button("Skriv ut i Bambu Studio") { run.exportAll() }.keyboardShortcut("e").disabled(run.parts.isEmpty)
                 Menu("Lägg till del från mall") {

@@ -51,6 +51,7 @@ extension Runner {
             if undoStack.count > 200 { undoStack.removeFirst() }
             redoStack = []
             undoBurst = name
+            historikNotera(name)
         }
         undoTimer?.invalidate()
         undoTimer = Timer.scheduledTimer(withTimeInterval: immediate ? 0.05 : 0.7, repeats: false) { [weak self] _ in self?.settleUndo() }

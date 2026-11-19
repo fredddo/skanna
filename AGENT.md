@@ -205,3 +205,11 @@ som du ändrar när användaren ber om det ("gör locket i PETG-CF med 4 väggar
   på delar. Appen visar och exporterar delarna med de namnen (också i Bambu Studio). Byter användaren namn kommer en rad i
   loggen ("Bytte namn på delen …") – använd det namnet när du pratar om delen. Ändra inte filen själv.
 - **Färger** sätts av appen (färgschema per projekt); `farg` i `delar.json` används bara med schemat "Delarnas egna färger".
+
+## Historik i git (appen committar, inte du)
+Om projektet ligger i ett git-repo gör appen automatiskt en commit av projektets `cad/` och `projekt.json` när en ändring
+har satt sig (efter att du satt `status` till något annat än `arbetar`, när användaren ändrat något, vid projektbyte och när appen stängs).
+Projektets `.gitignore` håller bilder, video och mesh utanför (och i projekt med del-skript även byggresultat: STEP/STL/3MF/`-ytor.json`).
+Commit-rubriken tas från första raden i ditt senaste meddelande i `claude.json` – skriv den som en kort sammanfattning av ändringen.
+Committa, pusha eller skriv om historiken inte själv. Går användaren tillbaka till en tidigare version får du ett `svar.json`-meddelande
+("Historik"): filerna i `cad/` (utom samtalet) är då som i den versionen – läs om skripten innan du fortsätter.
