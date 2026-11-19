@@ -33,7 +33,7 @@ struct Workspace: View {
                 HStack(spacing: 0) {
                     canvas
                     Divider()
-                    RightPanel(run: run, tab: $rightTab).frame(width: 340)
+                    if !run.dolPaneler { RightPanel(run: run, tab: $rightTab).frame(width: 340) }
                 }
             }
         }
@@ -68,7 +68,7 @@ struct Workspace: View {
                 .fixedSize()
                 .disabled(!run.parts.contains { $0.export != nil })
                 .help("Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
-            Button { run.openFolder() } label: { Image(systemName: "folder") }.help("Öppna projektmappen i Finder")
+            Button { run.openFolder() } label: { Image(systemName: "folder") }.help("Öppna projektmappen i Finder (visa i Finder: ⇧⌘R)")
             Menu {
                 Picker("Bakgrund", selection: $background) { Text("Vit").tag(0); Text("Grå").tag(1); Text("Mörk").tag(2) }
                 Picker("Upp i 3D-vyn", selection: Binding(get: { Int(upSign) }, set: { UserDefaults.standard.set($0, forKey: upKey); upTick += 1 })) {
@@ -82,7 +82,7 @@ struct Workspace: View {
                 }
                 Button("Kortkommandon …") { run.showShortcuts = true }
             } label: { Image(systemName: "gearshape") }
-            .menuStyle(.borderlessButton).frame(width: 34)
+            .menuStyle(.borderlessButton).frame(width: 34).help("Bakgrund, upp-riktning, uppdraget till Claude och kortkommandon (⌘/)")
             Button { withAnimation { big.toggle() } } label: {
                 Image(systemName: big ? "sidebar.left" : "rectangle.leadinghalf.inset.filled")
             }
@@ -107,21 +107,35 @@ struct Workspace: View {
             viewer
             VStack(alignment: .leading, spacing: 8) {
                 ToolBar(run: run, followPhotos: $followPhotos, cadStyle: $cadStyle, overlayOpacity: overlayOpacity)
-                HStack(alignment: .top) {
-                    if showTree {
-                        ObjektPanel(run: run, hide: { withAnimation { showTree = false } })
-                            .frame(width: 236)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
-                    } else {
-                        Button { withAnimation { showTree = true } } label: { Label("Objekt", systemImage: "list.bullet") }
-                            .buttonStyle(.bordered).help("Visa objektträdet")
+                if !run.dolPaneler {
+                    HStack(alignment: .top) {
+                        if showTree {
+                            ObjektPanel(run: run, hide: { withAnimation { showTree = false } })
+                                .frame(width: 236)
+                                .transition(.move(edge: .leading).combined(with: .opacity))
+                        } else {
+                            Button { withAnimation { showTree = true } } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.right").font(.caption.bold()).frame(width: 14).foregroundStyle(.secondary)
+                                    Text("Objekt").font(.headline)
+                                    Text("\(run.parts.count + (run.model != nil ? 1 : 0))").font(.caption).foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 10).padding(.vertical, 8)
+                                .background(RoundedRectangle(cornerRadius: 10).fill(.regularMaterial))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.25)))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain).help("Fäll ut objektträdet (O)")
+                        }
+                        Spacer()
                     }
-                    Spacer()
                 }
                 Spacer(minLength: 0)
-                HStack(alignment: .bottom) {
-                    Inspector(run: run, toChat: { rightTab = 0 })
-                    Spacer()
+                if !run.dolPaneler {
+                    HStack(alignment: .bottom) {
+                        Inspector(run: run, toChat: { rightTab = 0 })
+                        Spacer()
+                    }
                 }
             }
             .padding(10)
@@ -182,6 +196,14 @@ struct Workspace: View {
                 return nil
             }
             if e.type == .keyUp { if e.keyCode == 49 { run.mellanslag = false }; return e }
+            // ⇥: släck/tänd alla paneler; Esc tänder dem igen
+            if run.screen == .projekt, e.keyCode == 48, e.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+               !(NSApp.keyWindow?.firstResponder is NSTextView), NSApp.keyWindow?.attachedSheet == nil {
+                withAnimation(.easeInOut(duration: 0.2)) { run.dolPaneler.toggle() }; return nil
+            }
+            if run.screen == .projekt, e.keyCode == 53, run.dolPaneler, NSApp.keyWindow?.attachedSheet == nil {
+                withAnimation(.easeInOut(duration: 0.2)) { run.dolPaneler = false }; return nil
+            }
             guard run.screen == .projekt, e.modifierFlags.intersection([.command, .control, .option]).isEmpty,
                   !(NSApp.keyWindow?.firstResponder is NSTextView), NSApp.keyWindow?.attachedSheet == nil,
                   let c = e.charactersIgnoringModifiers?.lowercased() else { return e }
@@ -194,6 +216,7 @@ struct Workspace: View {
             case "e": withAnimation { run.explode = run.explode > 0 ? 0 : 1 }
             case "x": run.sectionOn.toggle(); run.snittPlaceras = run.sectionOn
             case "r": run.resetLayout()
+            case "o": withAnimation { showTree.toggle() }
             default:
                 if e.keyCode == 53 {   // Esc: rensa val och mätning (fotoläget har egen Esc-knapp)
                     if run.tool == .rita, run.ritning != nil { run.kastaRitning(); return nil }
@@ -249,7 +272,7 @@ struct ToolBar: View {
             sep
             Toggle(isOn: Binding(get: { run.sectionOn }, set: { run.sectionOn = $0; run.snittPlaceras = $0 })) { Image(systemName: "square.split.diagonal") }
                 .toggleStyle(.button).buttonStyle(.borderless).disabled(run.snapped != nil)
-                .help("Snitt (X): klipper längs det huvudplan som ligger mest tvärs blicken. Klicka sedan i modellen där snittet ska gå.")
+                .help("Snitt (X): klicka sedan i modellen där snittet ska gå – planet vänds mot dig (⌥-klick: lodrätt)")
             if run.sectionOn, let l = run.sectionLabel {
                 Text(l.replacingOccurrences(of: "Snitt: ", with: "")).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 Slider(value: Binding(get: { run.sectionCoord ?? run.sectionRange.lowerBound },
@@ -266,7 +289,7 @@ struct ToolBar: View {
                 Picker("Delarna ritas", selection: $cadStyle) { Text("Fyllda").tag(0); Text("Bara kanter").tag(1); Text("Fyllda med kanter").tag(2) }
                     .pickerStyle(.inline)
             } label: { Image(systemName: "cube") }
-            .menuStyle(.borderlessButton).fixedSize().help("Stil: fyllt, kanter eller båda")
+            .menuStyle(.borderlessButton).fixedSize().help("Hur delarna ritas: fyllda, bara kanter eller båda")
             Menu {
                 Picker("Färgschema", selection: $run.fargschema) {
                     ForEach(Fargschema.allCases) { f in Text(f.namn).tag(f) }
@@ -276,7 +299,12 @@ struct ToolBar: View {
             opacityControl
             sep
             Button { run.request("Hela") } label: { Image(systemName: "viewfinder") }
-                .buttonStyle(.borderless).help("Hela modellen (⌘0, dubbelklick)")
+                .buttonStyle(.borderless).help("Hela modellen (⌘0, dubbelklick) · vyer: ⌘1–⌘7")
+            Button { withAnimation(.easeInOut(duration: 0.2)) { run.dolPaneler.toggle() } } label: {
+                Image(systemName: run.dolPaneler ? "rectangle.inset.filled" : "rectangle.dashed")
+            }
+            .buttonStyle(.borderless)
+            .help(run.dolPaneler ? "Tänd panelerna igen (⇥ eller Esc)" : "Släck alla paneler – bara modellen (⇥, Esc tänder igen)")
             if run.snapped != nil { photoNav }
             if let t = run.note { Label(t, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange).lineLimit(1) }
         }
@@ -306,9 +334,9 @@ struct ToolBar: View {
         let r = run.reliablePhotos
         return HStack(spacing: 4) {
             sep
-            Button { step(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless).keyboardShortcut(.leftArrow, modifiers: [])
+            Button { step(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless).keyboardShortcut(.leftArrow, modifiers: []).help("Föregående bild (←)")
             if let f = run.snapped, let i = r.firstIndex(of: f) { Text("\(i + 1)/\(r.count)").font(.caption.monospacedDigit()) }
-            Button { step(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless).keyboardShortcut(.rightArrow, modifiers: [])
+            Button { step(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless).keyboardShortcut(.rightArrow, modifiers: []).help("Nästa bild (→)")
         }
     }
 

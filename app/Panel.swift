@@ -8,35 +8,47 @@ struct ObjektPanel: View {
     @ObservedObject var run: Runner
     var hide: () -> Void
     @AppStorage("shading") private var scanStyle = 1
+    @AppStorage("skanningOppen") private var scanOpen = true
     @State private var expanded: Set<String> = []
+    @State private var dropTarget: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
+                Button(action: hide) { Image(systemName: "chevron.down").font(.caption.bold()).frame(width: 14) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Fäll ihop objektträdet (O)")
                 Text("Objekt").font(.headline)
                 Spacer()
                 addMenu
-                Button(action: hide) { Image(systemName: "sidebar.left") }.buttonStyle(.borderless).help("Dölj objektträdet")
             }
             .padding(.bottom, 4)
             ScrollIfNeeded(rows: run.parts.count + run.underObjekt.values.reduce(0) { $0 + $1.count } / 2 + (run.model != nil ? 1 : 0), limit: 12) {
                 VStack(alignment: .leading, spacing: 1) {
-                    if run.model != nil {
-                        HStack(spacing: 0) {
-                            row(id: "skanning", name: "Skanning", sub: ["Textur", "Form", "Trådnät", "Genomskinlig"][min(max(scanStyle, 0), 3)],
-                                color: .gray, icon: "camera.viewfinder", indent: 0)
-                            Menu {
-                                Picker("Visa skanningen som", selection: $scanStyle) {
-                                    Text("Textur (foto)").tag(0); Text("Form (grå)").tag(1); Text("Trådnät").tag(2); Text("Genomskinlig").tag(3)
-                                }.pickerStyle(.inline)
-                            } label: { Image(systemName: "slider.horizontal.3") }
-                            .menuStyle(.borderlessButton).frame(width: 26).help("Hur skanningen ritas")
-                        }
-                    }
-                    if !run.parts.isEmpty || run.model != nil { snittGroup }
                     let refs = run.parts.filter { $0.roll != "design" }
                     let designs = run.parts.filter { $0.roll == "design" }
-                    if !refs.isEmpty { header("Referens") ; ForEach(refs) { partRow($0) } }
+                    if run.model != nil {
+                        // skanningen överst, och allt som kommer ur skanningen (referensdelar) under den
+                        HStack(spacing: 2) {
+                            if refs.isEmpty { Color.clear.frame(width: 12, height: 1) } else {
+                                Button { scanOpen.toggle() } label: {
+                                    Image(systemName: scanOpen ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
+                                }.buttonStyle(.plain).foregroundStyle(.secondary).help(scanOpen ? "Fäll ihop skanningens lager" : "Visa skanningens lager")
+                            }
+                            row(id: "skanning", name: "Skanning",
+                                sub: ["Textur", "Form", "Trådnät", "Genomskinlig"][min(max(scanStyle, 0), 3)] + (refs.isEmpty ? "" : " · \(refs.count) lager"),
+                                color: .gray, icon: "camera.viewfinder", indent: 0) {
+                                Menu {
+                                    Picker("Visa skanningen som", selection: $scanStyle) {
+                                        Text("Textur (foto)").tag(0); Text("Form (grå)").tag(1); Text("Trådnät").tag(2); Text("Genomskinlig").tag(3)
+                                    }.pickerStyle(.inline)
+                                } label: { Image(systemName: "slider.horizontal.3") }
+                                .menuStyle(.borderlessButton).frame(width: 26).help("Hur skanningen ritas")
+                            }
+                        }
+                        if scanOpen { ForEach(refs) { partRow($0, indent: 14) } }
+                    }
+                    if !run.parts.isEmpty || run.model != nil { snittGroup }
+                    if !refs.isEmpty && run.model == nil { header("Referens"); ForEach(refs) { partRow($0) } }
                     if !designs.isEmpty { header("Konstruktion"); ForEach(designs) { partRow($0) } }
                     if run.parts.isEmpty && run.model == nil {
                         Text("Inga delar än. Lägg till en från en mall (+) eller beskriv för Claude vad du vill bygga.")
@@ -45,9 +57,9 @@ struct ObjektPanel: View {
                 }
             }
             HStack(spacing: 8) {
-                Button("Visa alla") { run.hidden = [] }.disabled(run.hidden.isEmpty)
+                Button("Visa alla") { run.hidden = [] }.disabled(run.hidden.isEmpty).help("Tänd alla lager")
                 if run.selectedPart != nil {
-                    Button("Bara vald") { isolate(run.selectedPart!) }
+                    Button("Bara vald") { isolate(run.selectedPart!) }.help("Släck allt utom den valda delen")
                 }
                 Spacer()
             }
@@ -70,9 +82,6 @@ struct ObjektPanel: View {
                 Image(systemName: snittOpen ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
             }.buttonStyle(.plain).foregroundStyle(.secondary)
             HStack(spacing: 6) {
-                Button { run.sectionOn.toggle(); run.snittPlaceras = run.sectionOn } label: {
-                    Image(systemName: run.sectionOn ? "eye" : "eye.slash").frame(width: 18)
-                }.buttonStyle(.plain).foregroundStyle(run.sectionOn ? Color.primary : Color.secondary).help("Snitt av/på (X)")
                 Image(systemName: "square.split.diagonal").foregroundStyle(.secondary).frame(width: 12)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Snitt")
@@ -86,6 +95,9 @@ struct ObjektPanel: View {
                     Button { run.request("spara-snitt") } label: { Image(systemName: "plus.square.on.square") }
                         .buttonStyle(.borderless).help("Spara snittvyn (plan och kamera)")
                 }
+                Button { run.sectionOn.toggle(); run.snittPlaceras = run.sectionOn } label: {
+                    Image(systemName: run.sectionOn ? "eye" : "eye.slash").frame(width: 18)
+                }.buttonStyle(.plain).foregroundStyle(run.sectionOn ? Color.primary : Color.secondary).help("Snitt av/på (X)")
             }
             .padding(.vertical, 3).padding(.horizontal, 4)
             .contentShape(Rectangle())
@@ -95,8 +107,6 @@ struct ObjektPanel: View {
             ForEach(run.snittvyer) { v in
                 let on = run.sectionOn && run.aktivSnittvy == v.id
                 HStack(spacing: 6) {
-                    Button { run.toggleSavedSection(v) } label: { Image(systemName: on ? "eye" : "eye.slash").frame(width: 18) }
-                        .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).help(on ? "Släck snittet" : "Tänd snittet")
                     Image(systemName: "rectangle.split.2x1").foregroundStyle(.secondary).frame(width: 12)
                     if renaming == v.id {
                         TextField("", text: $newName).textFieldStyle(.roundedBorder).font(.caption)
@@ -105,6 +115,8 @@ struct ObjektPanel: View {
                         Text(v.namn).lineLimit(1)
                     }
                     Spacer(minLength: 0)
+                    Button { run.toggleSavedSection(v) } label: { Image(systemName: on ? "eye" : "eye.slash").frame(width: 18) }
+                        .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).help(on ? "Släck snittet" : "Tänd snittet")
                 }
                 .padding(.vertical, 2).padding(.horizontal, 4).padding(.leading, 12)
                 .background(RoundedRectangle(cornerRadius: 5).fill(on ? Color.accentColor.opacity(0.14) : Color.clear))
@@ -119,7 +131,7 @@ struct ObjektPanel: View {
             }
             if run.snittvyer.isEmpty {
                 Text(run.sectionOn ? "Spara vyn med knappen ovan." : "Slå på snittet (X) och klicka där det ska gå.")
-                    .font(.caption2).foregroundStyle(.secondary).padding(.leading, 34).padding(.bottom, 2)
+                    .font(.caption2).foregroundStyle(.secondary).padding(.leading, 16).padding(.bottom, 2)
             }
         }
     }
@@ -139,7 +151,7 @@ struct ObjektPanel: View {
             }
             Button("Bygg om alla delar  ⌘B") { run.rebuild() }.disabled(!run.canEdit)
         } label: { Image(systemName: "plus") }
-        .menuStyle(.borderlessButton).frame(width: 26).help("Lägg till en del från en mall")
+        .menuStyle(.borderlessButton).frame(width: 26).help("Lägg till en del från en mall · bygg om (⌘B)")
     }
 
     private func isolate(_ id: String) {
@@ -151,7 +163,7 @@ struct ObjektPanel: View {
         run.hidden = all
     }
 
-    @ViewBuilder private func partRow(_ p: PartInfo) -> some View {
+    @ViewBuilder private func partRow(_ p: PartInfo, indent: CGFloat = 0) -> some View {
         let subs = run.underObjekt[p.id] ?? []
         let color = Color(nsColor: run.color(for: p))
         HStack(spacing: 2) {
@@ -163,9 +175,20 @@ struct ObjektPanel: View {
             // konstruktionsdelar: plasten först (samma som i Bambu Studio: "Lock (PETG-CF)")
             let sub = subs.count > 1 ? "\(subs.count) kroppar" : p.beskrivning
             row(id: p.id, name: p.namn, sub: p.roll == "design" ? ([run.plast(p.id)] + [sub].compactMap { $0 }).joined(separator: " · ") : sub,
-                color: color, icon: nil, indent: 0)
+                color: color, icon: nil, indent: 0, renamable: true)
         }
+        .padding(.leading, indent)
+        .overlay(alignment: .top) { if dropTarget == p.id { Rectangle().fill(Color.accentColor).frame(height: 2) } }
+        .draggable(p.id) { Text(p.namn).padding(4).background(RoundedRectangle(cornerRadius: 5).fill(.regularMaterial)) }
+        .dropDestination(for: String.self) { items, _ in
+            guard let s = items.first, run.parts.contains(where: { $0.id == s }) else { return false }
+            withAnimation { run.movePart(s, to: p.id) }
+            return true
+        } isTargeted: { on in dropTarget = on ? p.id : (dropTarget == p.id ? nil : dropTarget) }
         .contextMenu {
+            Button("Byt namn …") { newName = p.namn; renaming = p.id }
+            if run.egnaNamn[p.id] != nil { Button("Tillbaka till Claudes namn") { run.renamePart(p.id, "") } }
+            Divider()
             Button("Visa bara den här") { isolate(p.id) }
             Button("Visa alla") { run.hidden = [] }
             if p.export != nil { Button("Öppna i Bambu Studio") { run.export(p) } }
@@ -174,34 +197,48 @@ struct ObjektPanel: View {
         }
         if expanded.contains(p.id) {
             ForEach(subs) { s in
-                row(id: s.id, name: s.namn, sub: nil, color: color.opacity(0.7), icon: nil, indent: 26)
+                row(id: s.id, name: s.namn, sub: nil, color: color.opacity(0.7), icon: nil, indent: 26 + indent)
                     .contextMenu { Button("Visa bara den här") { isolate(s.id) }; Button("Visa alla") { run.hidden = [] } }
             }
         }
     }
 
-    private func row(id: String, name: String, sub: String?, color: Color, icon: String?, indent: CGFloat) -> some View {
+    private func row(id: String, name: String, sub: String?, color: Color, icon: String?, indent: CGFloat, renamable: Bool = false) -> some View {
+        row(id: id, name: name, sub: sub, color: color, icon: icon, indent: indent, renamable: renamable) { EmptyView() }
+    }
+
+    private func row<Extra: View>(id: String, name: String, sub: String?, color: Color, icon: String?, indent: CGFloat, renamable: Bool = false,
+                                  @ViewBuilder extra: () -> Extra) -> some View {
         let on = !run.hidden.contains(id)
         let selected = run.selectedPart == id || run.traff?.objekt == id
         return HStack(spacing: 6) {
-            Button { run.toggle(id) } label: { Image(systemName: on ? "eye" : "eye.slash").frame(width: 18) }
-                .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).help(on ? "Dölj" : "Visa")
             if let icon { Image(systemName: icon).foregroundStyle(.secondary).frame(width: 12) }
             else { Circle().fill(color).frame(width: 11, height: 11) }
             VStack(alignment: .leading, spacing: 0) {
-                Text(name).lineLimit(1)
+                if renaming == id {
+                    TextField("", text: $newName).textFieldStyle(.roundedBorder).font(.callout)
+                        .onSubmit { run.renamePart(id, newName); renaming = nil }
+                        .onExitCommand { renaming = nil }
+                } else {
+                    Text(name).lineLimit(1)
+                        .simultaneousGesture(TapGesture(count: 2).onEnded { if renamable { newName = name; renaming = id } })
+                }
                 if let sub { Text(sub).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
             }
             .opacity(on ? 1 : 0.45)
             Spacer(minLength: 0)
             if run.offsets[id] != nil { Image(systemName: "arrow.up.and.down.and.arrow.left.and.right").font(.caption2).foregroundStyle(.orange).help("Flyttad tillfälligt") }
             if let o = run.partOpacity[run.opacityKey(id)], o < 0.999 { Text("\(Int(o * 100)) %").font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
+            extra()
+            Button { run.toggle(id) } label: { Image(systemName: on ? "eye" : "eye.slash").frame(width: 18) }
+                .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).help(on ? "Släck" : "Tänd")
         }
         .padding(.vertical, 3).padding(.horizontal, 4).padding(.leading, indent)
         .background(RoundedRectangle(cornerRadius: 5).fill(selected ? Color.accentColor.opacity(0.2) : Color.clear))
         .contentShape(Rectangle())
         .onTapGesture { run.selectPart(id) }
-        .help("Klicka för att välja (opacitet och mått gäller vald) · ögat visar/döljer")
+        .help(renamable ? "Klicka för att välja · dubbelklicka på namnet för att byta namn · dra för att flytta i listan · ögat tänder/släcker"
+                        : "Klicka för att välja (opacitet och mått gäller vald) · ögat tänder/släcker")
     }
 }
 

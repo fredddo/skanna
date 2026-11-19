@@ -56,7 +56,10 @@ final class Runner: ObservableObject {
     @Published var utskrift: [String: [String: String]] = [:]   // cad/utskrift.json (Utskrift.swift)
     var utskriftAndrade: [String: [String]] = [:]                // ändrade nycklar per del, ej skickade till Claude än
     var utskriftTimer: Timer?
-    @Published var hidden: Set<String> = [] { didSet { if hidden != oldValue { noteChange("Visa/dölj") } } }
+    @Published var hidden: Set<String> = [] { didSet { if hidden != oldValue { noteChange("Visa/dölj"); saveObjektVisning() } } }
+    @Published var objektOrdning: [String] = []          // användarens ordning i objektträdet (cad/objekt.json)
+    @Published var egnaNamn: [String: String] = [:]      // användarens namn på delar (cad/objekt.json)
+    @Published var dolPaneler = false                    // alla paneler släckta (⇥); Esc tänder igen
     @Published var claude: ClaudeInfo?
     @Published var focusQuestion: String?
     @Published var pick: PickPoint?
@@ -147,7 +150,9 @@ final class Runner: ObservableObject {
     private func projectChanged() {
         undoPaused = true
         defer { resetUndo() }
-        hidden = []; pick = nil; ritning = nil; visadRitning = nil; mellanslag = false; focusQuestion = nil; snapped = nil; note = nil; buildError = nil; buildLog = ""
+        let ov = loadObjektVisning()
+        objektOrdning = ov.ordning; egnaNamn = ov.namn
+        hidden = Set(ov.dolda); pick = nil; ritning = nil; visadRitning = nil; mellanslag = false; focusQuestion = nil; snapped = nil; note = nil; buildError = nil; buildLog = ""
         selectedPart = nil; sectionOn = false; sectionLabel = nil; sectionCoord = nil
         traff = nil; info = nil; matning = nil; explode = 0; offsets = [:]; underObjekt = [:]
         snittPlaceras = false; snittBegaran = nil
@@ -412,7 +417,7 @@ final class Runner: ObservableObject {
             photoIndex = reliablePhotos.firstIndex { $0.vy == "ovanifrån" } ?? 0
         } else { photos = newPhotos }
         if let partList {
-            parts = partList
+            parts = applyObjekt(partList)
         } else if let m = cadModel {
             parts = [PartInfo(id: "cad", namn: "CAD", fil: m.lastPathComponent, roll: "referens", farg: "#F28C26", export: nil, beskrivning: nil)]
         } else {

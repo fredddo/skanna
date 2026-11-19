@@ -12,7 +12,7 @@ struct ContentView: View {
 
     var body: some View {
         HSplitView {
-            if !big {
+            if !big && !(run.dolPaneler && run.screen == .projekt) {
                 Sidebar(run: run)
                     .frame(minWidth: 240, idealWidth: 270, maxWidth: 360)
             }
@@ -480,7 +480,10 @@ struct ShortcutsSheet: View {
         ("V · M · D · G · P", "Verktyg: Välj (mått på det du klickar), Mät, Rita, Flytta tillfälligt, Peka (ny chattråd)"),
         ("D, sedan dra", "Rita i vyn – starten fäster mot kanter; ⇧ = rak linje, mellanslag + dra = vrid, Esc = kasta ritningen"),
         ("E", "Dra isär alla delar (explode) / ihop igen"), ("R", "Lägg tillbaka allt som flyttats"),
-        ("X", "Snitt av/på (plan efter aktuell vy)"), ("Esc", "Avmarkera / rensa mätning / lämna fotoläget"),
+        ("X", "Snitt av/på (plan efter aktuell vy)"), ("O", "Fäll ihop/ut objektträdet"),
+        ("⇥", "Släck alla paneler – bara modellen (Esc tänder igen)"),
+        ("Esc", "Tänd panelerna / avmarkera / rensa mätning / lämna fotoläget"),
+        ("Nyp / skrollhjul", "Zooma mot pekaren"),
         ("⌘K", "Fotoläge av/på"), ("← →", "Föregående/nästa bild i fotoläget"),
         ("⇧⌘F", "Dölj/visa projektlistan"),
         ("Mellanslag / ↩", "Ta bild (guidad skanning)"), ("Volym upp", "Ta bild med Bluetooth-avtryckare (guidad skanning)"),

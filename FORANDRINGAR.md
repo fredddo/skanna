@@ -82,6 +82,16 @@ Arbetsytan är omgjord från grunden. Planen finns i `PLAN-modellera.md`.
   appen går att ångra: mått, fillet/fas, tillagda delar, visa/dölj, flytt, explode, opacitet, färgschema och snitt på/av.
   Ett drag eller en reglagerörelse räknas som ett steg. Ångrar du en modelländring skrivs filerna tillbaka och delen
   byggs om, och Claude får en rad i loggen. Meddelanden till Claude går inte att ångra.
+- **Objektträdet (2026-11-19):**
+  - Släckta lager sparas i `cad/objekt.json` och finns kvar när du öppnar projektet igen eller när Claude har byggt om.
+  - Skanningens lager (referensdelarna) ligger under *Skanning*, som går att fälla ihop.
+  - Dra en del för att flytta den i listan. Dubbelklicka på namnet (eller högerklicka → *Byt namn …*) för att byta namn.
+    Namnet används också i exporten och i Bambu Studio, och Claude får en rad i loggen.
+  - Ögat står längst till höger. Pilen överst fäller ihop hela trädet (O).
+- **Släck alla paneler:** knappen längst till höger i verktygsraden eller ⇥. Bara modellen och verktygsraden syns. Esc
+  (eller ⇥ igen) tänder dem.
+- **Zoom mot pekaren:** nyp och skrollhjul zoomar mot punkten under pekaren, inte mot mitten.
+- **Tooltips** på knapparna nämner kortkommandot där det finns ett.
 - **Mätetiketten** ritas som en bild, så rutan passar alltid texten.
 - **Mallen Låda med lock** hade en bugg som mätverktygen hittade: läppen satt lös från locket. Den är rättad.
 

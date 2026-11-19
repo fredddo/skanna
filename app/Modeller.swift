@@ -118,7 +118,7 @@ struct FotonFil: Decodable { let foton: [FotoInfo] }
 /// <projekt>/cad/delar.json
 struct PartInfo: Decodable, Identifiable, Hashable {
     let id: String
-    let namn: String
+    var namn: String          // användarens namn (cad/objekt.json) om det finns, annars Claudes
     let fil: String
     let roll: String        // "referens" | "design"
     let farg: String

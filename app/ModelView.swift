@@ -86,10 +86,17 @@ struct ModelView: NSViewRepresentable {
             target += -pov.simdWorldRight * Float(dx) * k + pov.simdWorldUp * Float(dy) * k
             applyCamera(animated: false)
         }
-        func zoom(_ amount: CGFloat) {
+        func zoom(_ amount: CGFloat, at p: NSPoint? = nil) {
             if follow, snapped != nil { return }
             leavePhoto()
+            let old = dist
             dist = max(radius * 0.25, min(radius * 25, dist * exp(-Float(amount))))
+            // mot pekaren: punkten under pekaren (i planet genom målet) ligger kvar under pekaren
+            if let p, let v = view, old > 0 {
+                let z = v.projectPoint(sv(target)).z
+                let under = v3(v.unprojectPoint(SCNVector3(p.x, p.y, z)))
+                target = under + (target - under) * (dist / old)
+            }
             applyCamera(animated: false)
         }
         /// Avstånd så att hela modellen (en sfär med radius) ryms både på höjden och bredden i vyn.
@@ -635,7 +642,7 @@ struct ModelView: NSViewRepresentable {
         v.onDragEnd = { [weak coord = context.coordinator] in coord?.dragEnded() }
         v.onOrbit = { [weak coord = context.coordinator] dx, dy in coord?.orbit(dx, dy) }
         v.onPan = { [weak coord = context.coordinator] dx, dy in coord?.pan(dx, dy) }
-        v.onZoom = { [weak coord = context.coordinator] a in coord?.zoom(a) }
+        v.onZoom = { [weak coord = context.coordinator] a, p in coord?.zoom(a, at: p) }
         v.onFit = { [weak coord = context.coordinator] in coord?.fitView() }
         v.onCapture = { [weak coord = context.coordinator] p, f in coord?.beginItemDrag(p, f) ?? false }
         v.onItemDrag = { [weak coord = context.coordinator] dx, dy in coord?.itemDrag(dx, dy) }
@@ -991,7 +998,7 @@ final class HoverSCNView: SCNView {
     var onScroll: (() -> Void)?
     var onOrbit: ((CGFloat, CGFloat) -> Void)?
     var onPan: ((CGFloat, CGFloat) -> Void)?
-    var onZoom: ((CGFloat) -> Void)?
+    var onZoom: ((CGFloat, NSPoint?) -> Void)?
     var onFit: (() -> Void)?
     var onCapture: ((NSPoint, NSEvent.ModifierFlags) -> Bool)?
     var onItemDrag: ((CGFloat, CGFloat) -> Void)?
@@ -1040,9 +1047,9 @@ final class HoverSCNView: SCNView {
     override func scrollWheel(with event: NSEvent) {
         onScroll?()
         let d = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY * 0.01 : event.scrollingDeltaY * 0.12
-        onZoom?(d)
+        onZoom?(d, convert(event.locationInWindow, from: nil))
     }
-    override func magnify(with event: NSEvent) { onZoom?(event.magnification * 2.5) }
+    override func magnify(with event: NSEvent) { onZoom?(event.magnification * 2.5, convert(event.locationInWindow, from: nil)) }
     private var area: NSTrackingArea?
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

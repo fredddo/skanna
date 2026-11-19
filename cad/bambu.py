@@ -278,6 +278,16 @@ def bygg_3mf(projekt, delar_ids, material, ut):
     prj = Path(projekt).expanduser().resolve()
     cad = prj / "cad"
     delar = json.loads((cad / "delar.json").read_text())["delar"]
+    # användarens namn och ordning ur appen (cad/objekt.json) går före delar.json
+    try:
+        ov = json.loads((cad / "objekt.json").read_text())
+    except (OSError, ValueError):
+        ov = {}
+    for d in delar:
+        if (ov.get("namn") or {}).get(d["id"]):
+            d["namn"] = ov["namn"][d["id"]]
+    ordning = {i: k for k, i in enumerate(ov.get("ordning") or [])}
+    delar.sort(key=lambda d: ordning.get(d["id"], len(ordning)))
     val = [d for d in delar if d.get("roll") == "design" and d.get("export")
            and (not delar_ids or d["id"] in delar_ids)]
     if not val:

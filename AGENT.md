@@ -201,4 +201,7 @@ som du ändrar när användaren ber om det ("gör locket i PETG-CF med 4 väggar
   och t.ex. `"Utskrift för Lock (lock): Plast (plast) = PETG-CF, Vägglager (wall_loops) = 4 (ändrat i appen, …)"`.
   Det är ingen tråd; ta hänsyn till det (t.ex. väggtjocklek i PETG-CF, toleranser) och svara bara om det påverkar
   konstruktionen.
+- **Objektträdet:** `cad/objekt.json` (`dolda`, `ordning`, `namn`) är användarens: släckta lager, ordning och egna namn
+  på delar. Appen visar och exporterar delarna med de namnen (också i Bambu Studio). Byter användaren namn kommer en rad i
+  loggen ("Bytte namn på delen …") – använd det namnet när du pratar om delen. Ändra inte filen själv.
 - **Färger** sätts av appen (färgschema per projekt); `farg` i `delar.json` används bara med schemat "Delarnas egna färger".
