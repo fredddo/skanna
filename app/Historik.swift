@@ -299,7 +299,7 @@ struct HistorikVy: View {
                             Text("nu").font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    .help(p.text)
+                    .tips(p.text)
                 }
                 .frame(minHeight: 280)
             }

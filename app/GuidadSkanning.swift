@@ -84,7 +84,7 @@ struct GuidedCaptureView: View {
                         Spacer()
                         Button { run.printTurntable() } label: { Label("Skriv ut vridskivan", systemImage: "printer") }
                         Button("Ändra måtten …") { run.customizeTurntable() }
-                            .help("Skapar ett modellprojekt från mallen Vridskiva där alla mått går att ändra")
+                            .tips("Skapar ett modellprojekt från mallen Vridskiva där alla mått går att ändra")
                     }.padding(6)
                 } label: { Text("Vridskiva").font(.headline) }
 
@@ -225,15 +225,15 @@ struct GuidedCaptureView: View {
             if kamera.kanLasa {
                 Toggle(isOn: Binding(get: { kamera.lasta }, set: { kamera.lasInstallningar($0) })) {
                     Label("Lås fokus/exponering", systemImage: kamera.lasta ? "lock.fill" : "lock.open")
-                }.toggleStyle(.button).help("Ställ in skärpan på delen först, lås sedan – då blir alla bilder lika")
+                }.toggleStyle(.button).tips("Ställ in skärpan på delen först, lås sedan – då blir alla bilder lika")
             }
             Spacer()
             Toggle(isOn: $autofoto) { Label("Autofoto", systemImage: "wand.and.stars") }
                 .toggleStyle(.button)
-                .help("Tar bilden automatiskt när du har vridit skivan och bilden stått still i knappt en sekund")
+                .tips("Tar bilden automatiskt när du har vridit skivan och bilden stått still i knappt en sekund")
                 .onChange(of: autofoto) { _, _ in vakt.aterstall() }
             if autofoto {
-                ProgressView(value: min(kamera.rorelse / 0.04, 1)).frame(width: 60).help("Rörelse i bilden")
+                ProgressView(value: min(kamera.rorelse / 0.04, 1)).frame(width: 60).tips("Rörelse i bilden")
             }
         }
     }
@@ -290,9 +290,9 @@ struct GuidedCaptureView: View {
             }
             Spacer()
             HStack {
-                Button("Avsluta") { finish() }.help("Spara det som är taget och gå till projektet")
+                Button("Avsluta") { finish() }.tips("Spara det som är taget och gå till projektet")
                 Spacer()
-                Button { kamera.stang() } label: { Image(systemName: "power") }.help("Stäng av kameran")
+                Button { kamera.stang() } label: { Image(systemName: "power") }.tips("Stäng av kameran")
             }
         }
         .padding(10)

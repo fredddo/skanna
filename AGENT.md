@@ -123,6 +123,9 @@ Chattpanelen i appen är uppdelad i **trådar**. Flera kan vara aktiva samtidigt
   började (se "Ritningar" nedan).
 - Byggfel som användaren skickar vidare kommer som `meddelande` med loggen.
 
+- `fler`: när användaren pekat på flera ställen (Peka, A/B/C …) ligger den första punkten i `plats`/`pa`/`yta`/… och resten i
+  `fler: [{plats, pa, yta, ytatyp, del, foto, foto_px}]`, i samma ordning (B, C …). Behandla dem som en grupp i samma tråd.
+
 ## Skanningar: foton i kamerans perspektiv
 `skanna poser <projekt>/bilder <projekt>/cad/poser.json` (≈1,5 min), sedan `.venv/bin/python cad/foton.py <projekt>`
 → `cad/foton.json`. Appens Foto-läge (⌘K) ritar delarna ovanpå bilderna i exakt kamerans perspektiv. Klickar användaren

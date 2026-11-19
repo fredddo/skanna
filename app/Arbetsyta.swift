@@ -55,25 +55,25 @@ struct Workspace: View {
             if run.rebuilding { ProgressView().controlSize(.small); Text("Bygger …").font(.caption).foregroundStyle(.secondary) }
             HStack(spacing: 2) {
                 Button { run.undo() } label: { Image(systemName: "arrow.uturn.backward") }
-                    .disabled(!run.canUndo).help(run.undoName.map { "Ångra \($0) (⌘Z)" } ?? "Inget att ångra (⌘Z)")
+                    .disabled(!run.canUndo).tips(run.undoName.map { "Ångra \($0) (⌘Z)" } ?? "Inget att ångra (⌘Z)")
                 Button { run.redo() } label: { Image(systemName: "arrow.uturn.forward") }
-                    .disabled(!run.canRedo).help(run.redoName.map { "Gör om \($0) (⇧⌘Z)" } ?? "Inget att göra om (⇧⌘Z)")
+                    .disabled(!run.canRedo).tips(run.redoName.map { "Gör om \($0) (⇧⌘Z)" } ?? "Inget att göra om (⇧⌘Z)")
             }
             Button { run.visaHistorik = true } label: {
                 Image(systemName: "clock.arrow.circlepath").foregroundStyle(run.historikPa ? Color.primary : Color.orange)
             }
-            .help(run.historikPa ? "Historik: \(run.historik.count) versioner i git – gå tillbaka till en tidigare (⌘Y)"
+            .tips(run.historikPa ? "Historik: \(run.historik.count) versioner i git – gå tillbaka till en tidigare (⌘Y)"
                                  : "Historik (⌘Y): projektet sparas inte i git – ingen historik mellan omstarter")
             Button { run.rebuild() } label: { Label("Bygg om", systemImage: "hammer") }
-                .disabled(!run.canEdit || run.rebuilding).help("Kör del-skripten igen (⌘B)")
+                .disabled(!run.canEdit || run.rebuilding).tips("Kör del-skripten igen (⌘B)")
             Menu {
                 Button("Bambu Studio-projekt (alla synliga delar, inställningar satta)") { run.exportBambuProject() }
                 Button("Öppna delarnas 3MF-filer var för sig") { run.exportAll() }
             } label: { Label("Skriv ut", systemImage: "printer") } primaryAction: { run.exportBambuProject() }
                 .fixedSize()
                 .disabled(!run.parts.contains { $0.export != nil })
-                .help("Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
-            Button { run.openFolder() } label: { Image(systemName: "folder") }.help("Öppna projektmappen i Finder (visa i Finder: ⇧⌘R)")
+                .tips("Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
+            Button { run.openFolder() } label: { Image(systemName: "folder") }.tips("Öppna projektmappen i Finder (visa i Finder: ⇧⌘R)")
             Menu {
                 Picker("Bakgrund", selection: $background) { Text("Vit").tag(0); Text("Grå").tag(1); Text("Mörk").tag(2) }
                 Picker("Upp i 3D-vyn", selection: Binding(get: { Int(upSign) }, set: { UserDefaults.standard.set($0, forKey: upKey); upTick += 1 })) {
@@ -87,11 +87,11 @@ struct Workspace: View {
                 }
                 Button("Kortkommandon …") { run.showShortcuts = true }
             } label: { Image(systemName: "gearshape") }
-            .menuStyle(.borderlessButton).frame(width: 34).help("Bakgrund, upp-riktning, uppdraget till Claude och kortkommandon (⌘/)")
+            .menuStyle(.borderlessButton).frame(width: 34).tips("Bakgrund, upp-riktning, uppdraget till Claude och kortkommandon (⌘/)")
             Button { withAnimation { big.toggle() } } label: {
                 Image(systemName: big ? "sidebar.left" : "rectangle.leadinghalf.inset.filled")
             }
-            .buttonStyle(.borderless).keyboardShortcut("f", modifiers: [.command, .shift]).help("Dölj/visa projektlistan (⇧⌘F)")
+            .buttonStyle(.borderless).keyboardShortcut("f", modifiers: [.command, .shift]).tips("Dölj/visa projektlistan (⇧⌘F)")
         }
     }
 
@@ -130,7 +130,7 @@ struct Workspace: View {
                                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.25)))
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain).help("Fäll ut objektträdet (O)")
+                            .buttonStyle(.plain).tips("Fäll ut objektträdet (O)")
                         }
                         Spacer()
                     }
@@ -156,7 +156,7 @@ struct Workspace: View {
 
     private var viewer: some View {
         ModelView(url: run.model, run: run, parts: run.partSpecs, hidden: run.hidden, scanStyle: min(shading, 3), background: background,
-                  marks: run.focusMarks + run.pins,
+                  marks: run.tool == .valj ? run.focusMarks : (run.tool == .peka ? run.pins : run.focusMarks + run.pins),
                   selectedFace: run.pick.flatMap { p in p.yta.map { "\(p.del ?? ""):\($0)" } },
                   photos: run.reliablePhotos, photoFolder: run.output, followPhotos: followPhotos,
                   overlayOpacity: overlayOpacity, cadStyle: cadStyle, viewRequest: run.viewRequest,
@@ -173,8 +173,9 @@ struct Workspace: View {
                   onNote: { t in run.note = t },
                   onFollowChange: { on in DispatchQueue.main.async { followPhotos = on } },
                   onPick: { p, target, part, face, typ, foto, px in
-                      run.pick = .init(pos: [Double(p.x), Double(p.y), Double(p.z)].map { ($0 * 10).rounded() / 10 },
-                                       target: target, yta: face, ytatyp: typ, del: part, foto: foto, foto_px: px) })
+                      let pp = Runner.PickPoint(pos: [Double(p.x), Double(p.y), Double(p.z)].map { ($0 * 10).rounded() / 10 },
+                                                target: target, yta: face, ytatyp: typ, del: part, foto: foto, foto_px: px)
+                      if run.tool == .peka { run.pekaKlick(pp) } else { run.pick = pp } })
             .overlay {
                 if run.model == nil && run.parts.isEmpty {
                     VStack(spacing: 10) {
@@ -225,6 +226,7 @@ struct Workspace: View {
             default:
                 if e.keyCode == 53 {   // Esc: rensa val och mätning (fotoläget har egen Esc-knapp)
                     if run.tool == .rita, run.ritning != nil { run.kastaRitning(); return nil }
+                    if run.tool == .peka, !run.pekpunkter.isEmpty { run.pekpunkter = []; run.traff = nil; run.info = nil; return nil }
                     if run.snapped != nil { return e }
                     if run.matning != nil || run.traff != nil || run.selectedPart != nil {
                         run.matning = nil; run.traff = nil; run.info = nil; run.selectedPart = nil; return nil
@@ -260,56 +262,56 @@ struct ToolBar: View {
                 .padding(4)
                 .background(RoundedRectangle(cornerRadius: 6).fill(run.tool == t ? Color.accentColor.opacity(0.22) : .clear))
                 .foregroundStyle(run.tool == t ? Color.accentColor : Color.primary)
-                .help("\(t.namn): \(t.hjalp)")
+                .tips("\(t.namn): \(t.hjalp)")
             }
             sep
             Button { withAnimation(.easeInOut(duration: 0.3)) { run.explode = run.explode > 0 ? 0 : 1 } } label: {
                 Image(systemName: run.explode > 0 ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
             }
-            .buttonStyle(.borderless).help("Dra isär alla delar (E) – bara visning")
+            .buttonStyle(.borderless).tips("Dra isär alla delar (E) – bara visning")
             if run.explode > 0 {
-                Slider(value: $run.explode, in: 0...1).frame(width: 80).help("Hur långt isär")
+                Slider(value: $run.explode, in: 0...1).frame(width: 80).tips("Hur långt isär")
             }
             if !run.offsets.isEmpty || run.explode > 0 {
                 Button { withAnimation { run.resetLayout() } } label: { Image(systemName: "arrow.down.forward.and.arrow.up.backward") }
-                    .buttonStyle(.borderless).help("Lägg tillbaka allt (R)")
+                    .buttonStyle(.borderless).tips("Lägg tillbaka allt (R)")
             }
             sep
             Toggle(isOn: Binding(get: { run.sectionOn }, set: { run.sectionOn = $0; run.snittPlaceras = $0 })) { Image(systemName: "square.split.diagonal") }
                 .toggleStyle(.button).buttonStyle(.borderless).disabled(run.snapped != nil)
-                .help("Snitt (X): klicka sedan i modellen där snittet ska gå – planet vänds mot dig (⌥-klick: lodrätt)")
+                .tips("Snitt (X): klicka sedan i modellen där snittet ska gå – planet vänds mot dig (⌥-klick: lodrätt)")
             if run.sectionOn, let l = run.sectionLabel {
                 Text(l.replacingOccurrences(of: "Snitt: ", with: "")).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 Slider(value: Binding(get: { run.sectionCoord ?? run.sectionRange.lowerBound },
                                       set: { v in if UserInput.isNow { run.sectionCoord = v } }),   // SwiftUI skriver annars tillbaka värden när intervallet ändras
-                       in: run.sectionRange).frame(width: 90).help("Flytta snittplanet")
+                       in: run.sectionRange).frame(width: 90).tips("Flytta snittplanet")
             }
             if !run.reliablePhotos.isEmpty {
                 Toggle(isOn: $followPhotos) { Image(systemName: "camera") }
                     .toggleStyle(.button).buttonStyle(.borderless)
-                    .help("Foto (⌘K): delarna ovanpå bilderna i kamerans exakta perspektiv")
+                    .tips("Foto (⌘K): delarna ovanpå bilderna i kamerans exakta perspektiv")
             }
             sep
             Menu {
                 Picker("Delarna ritas", selection: $cadStyle) { Text("Fyllda").tag(0); Text("Bara kanter").tag(1); Text("Fyllda med kanter").tag(2) }
                     .pickerStyle(.inline)
             } label: { Image(systemName: "cube") }
-            .menuStyle(.borderlessButton).fixedSize().help("Hur delarna ritas: fyllda, bara kanter eller båda")
+            .menuStyle(.borderlessButton).fixedSize().tips("Hur delarna ritas: fyllda, bara kanter eller båda")
             Menu {
                 Picker("Färgschema", selection: $run.fargschema) {
                     ForEach(Fargschema.allCases) { f in Text(f.namn).tag(f) }
                 }.pickerStyle(.inline)
             } label: { Image(systemName: "paintpalette") }
-            .menuStyle(.borderlessButton).fixedSize().help("Färgschema för delarna (olika projekt får olika scheman)")
+            .menuStyle(.borderlessButton).fixedSize().tips("Färgschema för delarna (olika projekt får olika scheman)")
             opacityControl
             sep
             Button { run.request("Hela") } label: { Image(systemName: "viewfinder") }
-                .buttonStyle(.borderless).help("Hela modellen (⌘0, dubbelklick) · vyer: ⌘1–⌘7")
+                .buttonStyle(.borderless).tips("Hela modellen (⌘0, dubbelklick) · vyer: ⌘1–⌘7")
             Button { withAnimation(.easeInOut(duration: 0.2)) { run.dolPaneler.toggle() } } label: {
                 Image(systemName: run.dolPaneler ? "rectangle.inset.filled" : "rectangle.dashed")
             }
             .buttonStyle(.borderless)
-            .help(run.dolPaneler ? "Tänd panelerna igen (⇥ eller Esc)" : "Släck alla paneler – bara modellen (⇥, Esc tänder igen)")
+            .tips(run.dolPaneler ? "Tänd panelerna igen (⇥ eller Esc)" : "Släck alla paneler – bara modellen (⇥, Esc tänder igen)")
             if run.snapped != nil { photoNav }
             if let t = run.note { Label(t, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange).lineLimit(1) }
         }
@@ -324,14 +326,14 @@ struct ToolBar: View {
     @ViewBuilder private var opacityControl: some View {
         if let id = run.selectedPart {
             let name = id == "skanning" ? "Skanning" : (run.parts.first { $0.id == id }?.namn ?? id)
-            Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary).help("Opacitet: \(name)")
+            Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary).tips("Opacitet: \(name)")
             Slider(value: Binding(get: { run.partOpacity[run.opacityKey(id)] ?? (run.snapped != nil ? overlayOpacity : 1) },
                                   set: { run.setOpacity(run.opacityKey(id), $0) }), in: 0.05...1)
-                .frame(width: 80).help("Opacitet: \(name)")
+                .frame(width: 80).tips("Opacitet: \(name)")
         } else if run.snapped != nil {
-            Image(systemName: "photo").foregroundStyle(.secondary).help("Opacitet: foto")
+            Image(systemName: "photo").foregroundStyle(.secondary).tips("Opacitet: foto")
             Slider(value: Binding(get: { run.partOpacity["foto/fotot"] ?? 1 }, set: { run.setOpacity("foto/fotot", $0) }), in: 0.05...1)
-                .frame(width: 80).help("Opacitet: foto")
+                .frame(width: 80).tips("Opacitet: foto")
         }
     }
 
@@ -339,9 +341,9 @@ struct ToolBar: View {
         let r = run.reliablePhotos
         return HStack(spacing: 4) {
             sep
-            Button { step(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless).keyboardShortcut(.leftArrow, modifiers: []).help("Föregående bild (←)")
+            Button { step(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless).keyboardShortcut(.leftArrow, modifiers: []).tips("Föregående bild (←)")
             if let f = run.snapped, let i = r.firstIndex(of: f) { Text("\(i + 1)/\(r.count)").font(.caption.monospacedDigit()) }
-            Button { step(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless).keyboardShortcut(.rightArrow, modifiers: []).help("Nästa bild (→)")
+            Button { step(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless).keyboardShortcut(.rightArrow, modifiers: []).tips("Nästa bild (→)")
         }
     }
 
@@ -444,7 +446,7 @@ struct Inspector: View {
             Text(info.rubrik).font(.headline).lineLimit(2)
             Spacer()
             Button { run.info = nil; run.traff = nil; run.selectedPart = nil } label: { Image(systemName: "xmark.circle.fill") }
-                .buttonStyle(.plain).foregroundStyle(.secondary).help("Avmarkera (Esc)")
+                .buttonStyle(.plain).foregroundStyle(.secondary).tips("Avmarkera (Esc)")
         }
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
             ForEach(Array(info.rader.enumerated()), id: \.offset) { _, r in

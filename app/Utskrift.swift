@@ -213,7 +213,7 @@ struct UtskriftKort: View {
                 Spacer(minLength: 0)
                 if !(run.utskrift[pid]?.isEmpty ?? true) {
                     Button("Återställ") { run.resetUtskrift(pid) }.controlSize(.small).buttonStyle(.link)
-                        .help("Tillbaka till del-skriptets inställningar")
+                        .tips("Tillbaka till del-skriptets inställningar")
                 }
             }
             if open { falt } else {
@@ -251,7 +251,7 @@ struct UtskriftKort: View {
                             }
                         }
                     } label: { Image(systemName: "chevron.down") }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 22).help("Välj plast")
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 22).tips("Välj plast")
                 }
             }
             if !Utskrift.installerade.isEmpty && !Utskrift.harProfil(run.plast(pid)) {
@@ -277,7 +277,7 @@ struct UtskriftKort: View {
                     }
                     .labelsHidden().pickerStyle(.menu).frame(width: 140)
                     .disabled(run.utskriftVarde(pid, "enable_support").0 != "1")
-                    .help("Supporttyp")
+                    .tips("Supporttyp")
                 }
             }
         }
@@ -293,7 +293,7 @@ struct UtskriftKort: View {
                         Spacer(minLength: 0)
                         if kalla == "app" {
                             Button { run.setUtskrift(pid, k, nil) } label: { Image(systemName: "xmark.circle") }
-                                .buttonStyle(.plain).foregroundStyle(.secondary).help("Ta bort (tillbaka till skriptets värde)")
+                                .buttonStyle(.plain).foregroundStyle(.secondary).tips("Ta bort (tillbaka till skriptets värde)")
                         }
                     }
                 }
@@ -312,7 +312,7 @@ struct UtskriftKort: View {
         let kalla = run.utskriftVarde(pid, k).1
         return Text(Utskrift.etikett[k] ?? k).font(.caption)
             .foregroundStyle(kalla == "app" ? Color.pink : Color.secondary)
-            .help(kalla == "app" ? "Ändrat (cad/utskrift.json) – högerklicka för att återställa"
+            .tips(kalla == "app" ? "Ändrat (cad/utskrift.json) – högerklicka för att återställa"
                   : kalla == "skript" ? "Från del-skriptet" : "Profilens standardvärde")
             .contextMenu {
                 if kalla == "app" { Button("Återställ till skriptets värde") { run.setUtskrift(pid, k, nil) } }

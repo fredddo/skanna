@@ -67,7 +67,7 @@ struct Sidebar: View {
                     Button("Öppna mapp …  ⌘O") { run.openOther() }
                 } label: { Label("Nytt", systemImage: "plus") }
                 .menuStyle(.borderlessButton).fixedSize()
-                .help("Nytt projekt eller ny skanning")
+                .tips("Nytt projekt eller ny skanning")
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
             List {
@@ -98,9 +98,9 @@ struct Sidebar: View {
                 }
             }
             HStack {
-                Button { run.screen = .valkommen } label: { Image(systemName: "questionmark.circle") }.help("Start och guide")
+                Button { run.screen = .valkommen } label: { Image(systemName: "questionmark.circle") }.tips("Start och guide")
                 Spacer()
-                Button { run.refreshScans() } label: { Image(systemName: "arrow.clockwise") }.help("Uppdatera listan")
+                Button { run.refreshScans() } label: { Image(systemName: "arrow.clockwise") }.tips("Uppdatera listan")
             }
             .buttonStyle(.borderless)
             .padding(10)
@@ -137,7 +137,7 @@ struct Sidebar: View {
             Button("Kopiera sökväg") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(s.id.path, forType: .string) }
             Button("Ta bort ur listan") { run.removeFromList(s.id) }
         }
-        .help(s.id.path)
+        .tips(s.id.path)
     }
 }
 
@@ -292,7 +292,7 @@ struct LengthRow: View {
             Text("mm").foregroundStyle(.secondary)
             Text("(skjutmått; tomt = okänd skala)").foregroundStyle(.secondary).font(.caption)
             Spacer()
-            Toggle("Max detalj (raw)", isOn: $run.raw).help("Ingen ytförenkling. Större fil, ingen förhandsvisning i Finder.")
+            Toggle("Max detalj (raw)", isOn: $run.raw).tips("Ingen ytförenkling. Större fil, ingen förhandsvisning i Finder.")
         }
         .disabled(run.running)
     }

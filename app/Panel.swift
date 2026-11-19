@@ -16,7 +16,7 @@ struct ObjektPanel: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Button(action: hide) { Image(systemName: "chevron.down").font(.caption.bold()).frame(width: 14) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Fäll ihop objektträdet (O)")
+                    .buttonStyle(.plain).foregroundStyle(.secondary).tips("Fäll ihop objektträdet (O)")
                 Text("Objekt").font(.headline)
                 Spacer()
                 addMenu
@@ -32,7 +32,7 @@ struct ObjektPanel: View {
                             if refs.isEmpty { Color.clear.frame(width: 12, height: 1) } else {
                                 Button { scanOpen.toggle() } label: {
                                     Image(systemName: scanOpen ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
-                                }.buttonStyle(.plain).foregroundStyle(.secondary).help(scanOpen ? "Fäll ihop skanningens lager" : "Visa skanningens lager")
+                                }.buttonStyle(.plain).foregroundStyle(.secondary).tips(scanOpen ? "Fäll ihop skanningens lager" : "Visa skanningens lager")
                             }
                             row(id: "skanning", name: "Skanning",
                                 sub: ["Textur", "Form", "Trådnät", "Genomskinlig"][min(max(scanStyle, 0), 3)] + (refs.isEmpty ? "" : " · \(refs.count) lager"),
@@ -42,7 +42,7 @@ struct ObjektPanel: View {
                                         Text("Textur (foto)").tag(0); Text("Form (grå)").tag(1); Text("Trådnät").tag(2); Text("Genomskinlig").tag(3)
                                     }.pickerStyle(.inline)
                                 } label: { Image(systemName: "slider.horizontal.3") }
-                                .menuStyle(.borderlessButton).frame(width: 26).help("Hur skanningen ritas")
+                                .menuStyle(.borderlessButton).frame(width: 26).tips("Hur skanningen ritas")
                             }
                         }
                         if scanOpen { ForEach(refs) { partRow($0, indent: 14) } }
@@ -57,9 +57,9 @@ struct ObjektPanel: View {
                 }
             }
             HStack(spacing: 8) {
-                Button("Visa alla") { run.hidden = [] }.disabled(run.hidden.isEmpty).help("Tänd alla lager")
+                Button("Visa alla") { run.hidden = [] }.disabled(run.hidden.isEmpty).tips("Tänd alla lager")
                 if run.selectedPart != nil {
-                    Button("Bara vald") { isolate(run.selectedPart!) }.help("Släck allt utom den valda delen")
+                    Button("Bara vald") { isolate(run.selectedPart!) }.tips("Släck allt utom den valda delen")
                 }
                 Spacer()
             }
@@ -91,13 +91,13 @@ struct ObjektPanel: View {
                 Spacer(minLength: 0)
                 if run.sectionOn {
                     Button { run.snittPlaceras = true } label: { Image(systemName: "scope") }
-                        .buttonStyle(.borderless).help("Flytta snittet: klicka i modellen där det ska gå (⌥-klick: lodrätt tvärs igenom)")
+                        .buttonStyle(.borderless).tips("Flytta snittet: klicka i modellen där det ska gå (⌥-klick: lodrätt tvärs igenom)")
                     Button { run.request("spara-snitt") } label: { Image(systemName: "plus.square.on.square") }
-                        .buttonStyle(.borderless).help("Spara snittvyn (plan och kamera)")
+                        .buttonStyle(.borderless).tips("Spara snittvyn (plan och kamera)")
                 }
                 Button { run.sectionOn.toggle(); run.snittPlaceras = run.sectionOn } label: {
                     Image(systemName: run.sectionOn ? "eye" : "eye.slash").frame(width: 18)
-                }.buttonStyle(.plain).foregroundStyle(run.sectionOn ? Color.primary : Color.secondary).help("Snitt av/på (X)")
+                }.buttonStyle(.plain).foregroundStyle(run.sectionOn ? Color.primary : Color.secondary).tips("Snitt av/på (X)")
             }
             .padding(.vertical, 3).padding(.horizontal, 4)
             .contentShape(Rectangle())
@@ -116,13 +116,13 @@ struct ObjektPanel: View {
                     }
                     Spacer(minLength: 0)
                     Button { run.toggleSavedSection(v) } label: { Image(systemName: on ? "eye" : "eye.slash").frame(width: 18) }
-                        .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).help(on ? "Släck snittet" : "Tänd snittet")
+                        .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).tips(on ? "Släck snittet" : "Tänd snittet")
                 }
                 .padding(.vertical, 2).padding(.horizontal, 4).padding(.leading, 12)
                 .background(RoundedRectangle(cornerRadius: 5).fill(on ? Color.accentColor.opacity(0.14) : Color.clear))
                 .contentShape(Rectangle())
                 .onTapGesture { run.showSection(v) }
-                .help("Visa snittet")
+                .tips("Visa snittet")
                 .contextMenu {
                     Button("Visa") { run.showSection(v) }
                     Button("Byt namn …") { newName = v.namn; renaming = v.id }
@@ -151,7 +151,7 @@ struct ObjektPanel: View {
             }
             Button("Bygg om alla delar  ⌘B") { run.rebuild() }.disabled(!run.canEdit)
         } label: { Image(systemName: "plus") }
-        .menuStyle(.borderlessButton).frame(width: 26).help("Lägg till en del från en mall · bygg om (⌘B)")
+        .menuStyle(.borderlessButton).frame(width: 26).tips("Lägg till en del från en mall · bygg om (⌘B)")
     }
 
     private func isolate(_ id: String) {
@@ -227,17 +227,17 @@ struct ObjektPanel: View {
             }
             .opacity(on ? 1 : 0.45)
             Spacer(minLength: 0)
-            if run.offsets[id] != nil { Image(systemName: "arrow.up.and.down.and.arrow.left.and.right").font(.caption2).foregroundStyle(.orange).help("Flyttad tillfälligt") }
+            if run.offsets[id] != nil { Image(systemName: "arrow.up.and.down.and.arrow.left.and.right").font(.caption2).foregroundStyle(.orange).tips("Flyttad tillfälligt") }
             if let o = run.partOpacity[run.opacityKey(id)], o < 0.999 { Text("\(Int(o * 100)) %").font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
             extra()
             Button { run.toggle(id) } label: { Image(systemName: on ? "eye" : "eye.slash").frame(width: 18) }
-                .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).help(on ? "Släck" : "Tänd")
+                .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).tips(on ? "Släck" : "Tänd")
         }
         .padding(.vertical, 3).padding(.horizontal, 4).padding(.leading, indent)
         .background(RoundedRectangle(cornerRadius: 5).fill(selected ? Color.accentColor.opacity(0.2) : Color.clear))
         .contentShape(Rectangle())
         .onTapGesture { run.selectPart(id) }
-        .help(renamable ? "Klicka för att välja · dubbelklicka på namnet för att byta namn · dra för att flytta i listan · ögat tänder/släcker"
+        .tips(renamable ? "Klicka för att välja · dubbelklicka på namnet för att byta namn · dra för att flytta i listan · ögat tänder/släcker"
                         : "Klicka för att välja (opacitet och mått gäller vald) · ögat tänder/släcker")
     }
 }
@@ -336,9 +336,9 @@ struct ParamRow: View {
                 Text(valueText).font(.callout.monospacedDigit())
                     .underline(run.canEdit && p.varde != nil, color: .secondary.opacity(0.4))
                     .onTapGesture { startEdit() }
-                    .help(run.canEdit ? "Klicka för att ändra" : "Måttet kan inte ändras här (inget del-skript)")
+                    .tips(run.canEdit ? "Klicka för att ändra" : "Måttet kan inte ändras här (inget del-skript)")
             }
-            Image(systemName: icon).foregroundStyle(color).help(p.kalla ?? "")
+            Image(systemName: icon).foregroundStyle(color).tips(p.kalla ?? "")
         }
         .contextMenu {
             if run.canEdit && p.varde != nil { Button("Ändra …") { startEdit() } }

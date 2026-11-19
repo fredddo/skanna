@@ -63,7 +63,12 @@ final class Runner: ObservableObject {
     @Published var dolPaneler = false { willSet { if newValue != dolPaneler { NotificationCenter.default.post(name: Runner.panelerByts, object: self) } } }                   // alla paneler släckta (⇥); Esc tänder igen
     @Published var claude: ClaudeInfo?
     @Published var focusQuestion: String?
-    @Published var pick: PickPoint?
+    /// Peka: punkter som blir förankring för nästa meddelande (flera går; Esc eller annat verktyg tar bort dem).
+    @Published var pekpunkter: [PickPoint] = []
+    var pick: PickPoint? {
+        get { pekpunkter.first }
+        set { pekpunkter = newValue.map { [$0] } ?? [] }
+    }
     @Published var photoIndex = 0
     @Published var toast: String?
     @Published var selectedPart: String?
@@ -73,7 +78,14 @@ final class Runner: ObservableObject {
     @Published var sectionCoord: Double?                 // planets läge (reglaget)
 
     // MARK: Verktyg och visning (Verktyg.swift) – ändrar aldrig modellen
-    @Published var tool: Verktyg = .valj
+    @Published var tool: Verktyg = .valj {
+        didSet {
+            guard tool != oldValue else { return }
+            if oldValue == .peka { pekpunkter = [] }                  // pekpunkterna hör till Peka
+            if tool == .valj || tool == .peka { matning = nil }      // Välj och Peka visar inga mått
+            if tool == .valj { focusQuestion = nil }                 // … och Välj inga pratnålar eller Claudes markeringar
+        }
+    }
     @Published var traff: Traff?                         // vald del/yta/kant/punkt (verktyget Välj/Peka)
     @Published var info: Info?                           // mått på det valda (inspektören)
     @Published var matning: Matning?                     // verktyget Mät
@@ -387,6 +399,14 @@ final class Runner: ObservableObject {
         return claude?.meddelanden?.filter { $0.svar_pa == nil || !tids.contains($0.svar_pa!) } ?? []
     }
 
+    static func pekBokstav(_ i: Int) -> String { i < 26 ? String(UnicodeScalar(65 + i)!) : "\(i + 1)" }
+
+    /// Peka-klick: lägg till en punkt – eller ta bort den om man klickar nära en befintlig (inom 1,5 mm).
+    func pekaKlick(_ p: PickPoint) {
+        func d(_ a: [Double], _ b: [Double]) -> Double { sqrt(zip(a, b).map { ($0 - $1) * ($0 - $1) }.reduce(0, +)) }
+        if let i = pekpunkter.firstIndex(where: { d($0.pos, p.pos) < 1.5 }) { pekpunkter.remove(at: i) } else { pekpunkter.append(p) }
+    }
+
     var pins: [CadInfo.Markering] {
         var out: [CadInfo.Markering] = []
         // bara nålar från trådar som fortfarande är aktiva – avslutade trådars platser försvinner ur 3D-vyn
@@ -394,8 +414,11 @@ final class Runner: ObservableObject {
             .flatMap { $0.entries.compactMap { $0.svar?.tid } })
         for (i, a) in answers.filter({ $0.plats != nil && active.contains($0.tid) }).enumerated() {
             out.append(.init(typ: "pin", fran: nil, till: nil, pos: a.plats, min: nil, max: nil, text: "\(i + 1)"))
+            for f in a.fler ?? [] { out.append(.init(typ: "pin", fran: nil, till: nil, pos: f.plats, min: nil, max: nil, text: "\(i + 1)")) }
         }
-        if let p = pick { out.append(.init(typ: "pin_ny", fran: nil, till: nil, pos: p.pos, min: nil, max: nil, text: "här")) }
+        for (i, p) in pekpunkter.enumerated() {
+            out.append(.init(typ: "pin_ny", fran: nil, till: nil, pos: p.pos, min: nil, max: nil, text: pekpunkter.count == 1 ? "här" : Runner.pekBokstav(i)))
+        }
         return out
     }
 
@@ -449,7 +472,7 @@ final class Runner: ObservableObject {
 
     /// Spara ett svar (eller fritt meddelande) med ev. bilaga, som kopieras in i cad/bilagor/.
     func send(questionID: String, question: String, text: String, attachment: URL?, plats: PickPoint? = nil, trad: String? = nil, kant: Int? = nil,
-              ritning: String? = nil, bilagaRel: String? = nil) {
+              ritning: String? = nil, bilagaRel: String? = nil, fler: [PickPoint] = []) {
         guard let folder = cadFolder, let url = answersURL else { return }
         let fm = FileManager.default
         try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -467,7 +490,9 @@ final class Runner: ObservableObject {
         loadAnswers()
         answers.append(Svar(fraga_id: questionID, fraga: question, svar: text, bilaga: bilaga, tid: isoNu(),
                             plats: plats?.pos, pa: plats?.target, yta: plats?.yta, ytatyp: plats?.ytatyp, del: plats?.del,
-                            foto: plats?.foto, foto_px: plats?.foto_px, trad: trad, kant: kant, ritning: ritning))
+                            foto: plats?.foto, foto_px: plats?.foto_px, trad: trad, kant: kant, ritning: ritning,
+                            fler: fler.isEmpty ? nil : fler.map { Svar.Plats(plats: $0.pos, pa: $0.target, yta: $0.yta, ytatyp: $0.ytatyp, del: $0.del,
+                                                                              foto: $0.foto, foto_px: $0.foto_px) }))
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
         if let data = try? enc.encode(SvarFil(svar: answers)) { try? data.write(to: url, options: .atomic) }

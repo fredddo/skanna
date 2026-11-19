@@ -144,8 +144,9 @@ extension Runner {
         func punkt(_ p: [Double]) -> String { "punkt " + p.map(fmt).joined(separator: "; ") }
         func namn(_ del: String?) -> String { del.flatMap { d in parts.first { $0.id == d }?.namn } ?? del ?? "skanning" }
         if let p = pick {
-            let t = p.yta.map { "\(namn(p.del ?? p.target)) · yta \($0)" } ?? punkt(p.pos)
-            return (p, nil, t)
+            func txt(_ p: PickPoint) -> String { p.yta.map { "\(namn(p.del ?? p.target)) · yta \($0)" } ?? punkt(p.pos) }
+            if pekpunkter.count == 1 { return (p, nil, txt(p)) }
+            return (p, nil, pekpunkter.enumerated().map { "\(Runner.pekBokstav($0.offset)) \(txt($0.element))" }.joined(separator: "  ·  "))
         }
         guard let t = traff else { return nil }
         let pp = PickPoint(pos: [t.pos.x, t.pos.y, t.pos.z], target: t.del ?? "skanning", yta: t.yta, ytatyp: nil, del: t.del, foto: t.foto, foto_px: t.fotoPx)
@@ -180,14 +181,15 @@ extension Runner {
             visadRitning = lasRitning(json)
         } else {
             send(questionID: anchor == nil ? "meddelande" : "plats", question: anchor == nil ? "Meddelande till Claude" : "Plats i modellen",
-                 text: t, attachment: attachment, plats: anchor?.point, kant: anchor?.kant)
+                 text: t, attachment: attachment, plats: anchor?.point, kant: anchor?.kant,
+                 fler: anchor != nil && anchor?.point == pick ? Array(pekpunkter.dropFirst()) : [])
         }
         reloadCad()
     }
 
     func chatFocus(_ th: ChatThread) {
         if th.isQuestion { focusQuestion = (focusQuestion == th.id) ? nil : th.id; return }
-        if let p = th.plats { pick = p }
+        if let p = th.plats { tool = .peka; pick = p }
     }
 }
 
@@ -260,7 +262,7 @@ struct ChattPanel: View {
     @ViewBuilder private var statusLine: some View {
         if run.claude == nil {
             Button { run.copyClaudeText() } label: { Label("Kopiera uppdrag till Claude", systemImage: "doc.on.clipboard") }
-                .help("Klistra in i chatten med Claude (Claude Code). Claude läser då AGENT.md och svarar här i appen.")
+                .tips("Klistra in i chatten med Claude (Claude Code). Claude läser då AGENT.md och svarar här i appen.")
         } else if let st = run.claude?.status {
             HStack(spacing: 6) {
                 if st == "arbetar" { ProgressView().controlSize(.mini) }
@@ -387,7 +389,7 @@ struct ChattTrad: View {
             }
             if !finished {
                 Button(action: onClose) { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.secondary).font(.caption)
-                    .help("Avsluta tråden")
+                    .tips("Avsluta tråden")
             }
             Image(systemName: "chevron.down").rotationEffect(.degrees(expanded ? 180 : 0)).font(.caption2).foregroundStyle(.secondary)
         }
@@ -396,7 +398,7 @@ struct ChattTrad: View {
             withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
             run.chatFocus(thread)
         }
-        .help(thread.canFocus ? "Klicka för att visa platsen i 3D-vyn och fälla ut tråden" : "Fäll ut tråden")
+        .tips(thread.canFocus ? "Klicka för att visa platsen i 3D-vyn och fälla ut tråden" : "Fäll ut tråden")
     }
 
     private var replyField: some View {
@@ -404,7 +406,7 @@ struct ChattTrad: View {
             TextField(thread.isQuestion ? "Ditt svar …" : "Svara …", text: $draft, axis: .vertical)
                 .lineLimit(1...4).textFieldStyle(.roundedBorder).font(.caption).focused($focused).onSubmit(send)
             Button(action: send) { Image(systemName: "paperplane.fill") }.buttonStyle(.borderless)
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty).help("Skicka (↩)")
+                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty).tips("Skicka (↩)")
         }
         .onChange(of: focused) { _, f in if f && thread.isQuestion { run.focusQuestion = thread.id } }
     }
@@ -441,7 +443,7 @@ struct ChattBubbla: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 5))
                                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(shown ? Color.pink : Color.secondary.opacity(0.3), lineWidth: 1.5))
                         } else { Label("Ritning", systemImage: "pencil.tip").font(.caption2) }
-                    }.buttonStyle(.plain).help("Tillbaka till vyn ritningen gjordes i, med strecken")
+                    }.buttonStyle(.plain).tips("Tillbaka till vyn ritningen gjordes i, med strecken")
                     HStack(spacing: 8) {
                         Button { run.visaRitning(rel) } label: { Label("Visa i vyn", systemImage: "pencil.tip") }
                         if shown { Button { run.visadRitning = nil } label: { Label("Dölj", systemImage: "eye.slash") } }
@@ -460,6 +462,10 @@ struct ChattBubbla: View {
     }
 
     static func anchorText(_ a: Svar) -> String {
+        let f = a.fler?.count ?? 0
+        return enAnchorText(a) + (f > 0 ? " + \(f) punkt\(f == 1 ? "" : "er") till" : "")
+    }
+    static func enAnchorText(_ a: Svar) -> String {
         let d = a.del ?? a.pa ?? "skanning"
         if let k = a.kant { return "\(d) · kant \(k)" }
         if let y = a.yta { return "\(d) · yta \(y)" }
@@ -489,17 +495,17 @@ struct ChattSkrivfalt: View {
                     Text("✏️ Ritning · \(r.streck.count) streck").font(.caption).lineLimit(1)
                     Spacer(minLength: 0)
                     Button { run.visaVantandeRitning() } label: { Image(systemName: "eye") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary).help("Tillbaka till ritvyn")
+                        .buttonStyle(.plain).foregroundStyle(.secondary).tips("Tillbaka till ritvyn")
                     Button { run.kastaRitning() } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary).help("Kasta ritningen (Esc, går att ångra)")
+                        .buttonStyle(.plain).foregroundStyle(.secondary).tips("Kasta ritningen (Esc, går att ångra)")
                 }
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.pink.opacity(0.10)))
             } else if let a = anchor {
                 HStack(spacing: 4) {
-                    Text("📍 " + a.text).font(.caption.monospacedDigit()).lineLimit(1).truncationMode(.middle)
+                    Text("📍 " + a.text).font(.caption.monospacedDigit()).lineLimit(run.pekpunkter.count > 1 ? 4 : 1).truncationMode(.middle)
                     Button { dropAnchor() } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary).help("Släpp förankringen")
+                        .buttonStyle(.plain).foregroundStyle(.secondary).tips("Släpp förankringen")
                 }
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(Capsule().fill(Color.red.opacity(0.10)))
@@ -508,11 +514,11 @@ struct ChattSkrivfalt: View {
                 TextField(run.ritning == nil ? "Skriv till Claude – ny tråd …" : "Beskriv vad ritningen ska bli …", text: $draft, axis: .vertical)
                     .lineLimit(1...5).textFieldStyle(.roundedBorder).focused($focused).onSubmit { send(anchor) }
                 Button { attachment = run.pickAttachment() } label: { Image(systemName: attachment == nil ? "paperclip" : "paperclip.circle.fill") }
-                    .buttonStyle(.borderless).help(attachment?.lastPathComponent ?? "Bifoga foto eller fil")
+                    .buttonStyle(.borderless).tips(attachment?.lastPathComponent ?? "Bifoga foto eller fil")
                 Button { send(anchor) } label: { Image(systemName: "paperplane.fill") }
                     .buttonStyle(.borderless)
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty && attachment == nil && run.ritning == nil)
-                    .help("Skicka (↩), ny rad med ⇧↩")
+                    .tips("Skicka (↩), ny rad med ⇧↩")
             }
             if let a = attachment { Text("Bifogas: \(a.lastPathComponent)").font(.caption2).foregroundStyle(.secondary) }
         }

@@ -104,6 +104,11 @@ struct Svar: Codable, Identifiable, Hashable {
     var trad: String? = nil      // svar i en befintlig tråd: trådens rot (tid för första meddelandet); nil = ny tråd
     var kant: Int? = nil         // vald CAD-kant (id i <del>-ytor.json "kanter")
     var ritning: String? = nil   // ritning i 3D-vyn: "ritningar/<id>.json" (bilden ligger i bilaga)
+    var fler: [Plats]? = nil     // fler pekpunkter (Peka, B, C …) – den första ligger i plats/pa/yta/…
+    struct Plats: Codable, Hashable {
+        let plats: [Double]; var pa: String? = nil; var yta: Int? = nil; var ytatyp: String? = nil; var del: String? = nil
+        var foto: String? = nil; var foto_px: [Double]? = nil
+    }
 }
 struct SvarFil: Codable { var svar: [Svar] }
 

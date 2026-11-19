@@ -119,7 +119,7 @@ struct ImageCheckSheet: View {
             HStack {
                 Button("Flytta bort suddiga bilder") { moveBlurry(med) }
                     .disabled(!done || bad.isEmpty)
-                    .help("Flyttar bilder som är klart suddigare än de andra till en egen mapp (går att ångra i Finder)")
+                    .tips("Flyttar bilder som är klart suddigare än de andra till en egen mapp (går att ångra i Finder)")
                 Spacer()
                 Button("Klar") { dismiss() }.keyboardShortcut(.defaultAction)
             }
