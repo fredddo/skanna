@@ -100,18 +100,17 @@ struct ModelView: NSViewRepresentable {
         func panelerByts() {
             guard let v = view, v.window != nil else { return }
             panelRekt = v.convert(v.bounds, to: nil)
+            // Kompensationen sker i vyns layoutpass (onLayout) – samma pass som storleksbytet, så ingen bild ritas
+            // med gammal kamera och ny vy (det var det som fick modellen att darra). Timern städar bara upp efteråt.
             panelTimer?.invalidate()
-            var n = 0
-            panelTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] t in
-                n += 1
-                self?.kompenseraPanelbyte()
-                if n > 90 { t.invalidate() }
+            panelTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.kompenseraPanelbyte(); self?.panelRekt = nil }
             }
         }
         func kompenseraPanelbyte() {
             guard let v = view, v.window != nil, let pov = v.pointOfView, let r0 = panelRekt, snapped == nil else { return }
             let r1 = v.convert(v.bounds, to: nil)
-            guard r1 != r0 else { return }
+            guard abs(r1.midX - r0.midX) > 0.01 || abs(r1.midY - r0.midY) > 0.01 else { return }
             panelRekt = r1
             let dx = Float(r0.midX - r1.midX), dy = Float(r0.midY - r1.midY)
             let k = dist * 2 * tan(Float(17 * Double.pi / 180)) / Float(max(v.bounds.height, 1))
@@ -178,7 +177,8 @@ struct ModelView: NSViewRepresentable {
             cv.pointOfView = cubeCam
             let click = NSClickGestureRecognizer(target: self, action: #selector(cubeClicked(_:)))
             cv.addGestureRecognizer(click)
-            cv.toolTip = "Klicka en sida för vyn, eller en prick för det fotot"
+            let tv = TipsVy(frame: cv.bounds); tv.autoresizingMask = [.width, .height]
+            tv.text = "Klicka en sida för vyn, eller en prick för det fotot"; cv.addSubview(tv)
             v.addSubview(cv)
             cubeView = cv
         }
@@ -671,6 +671,7 @@ struct ModelView: NSViewRepresentable {
         let v = HoverSCNView()
         v.onHover = { [weak coord = context.coordinator] p in coord?.hover(p) }
         context.coordinator.foljPanelbyten()
+        v.onLayout = { [weak coord = context.coordinator] in coord?.kompenseraPanelbyte() }
         v.onDragStart = { [weak coord = context.coordinator] in coord?.dragStarted() }
         v.onDragEnd = { [weak coord = context.coordinator] in coord?.dragEnded() }
         v.onOrbit = { [weak coord = context.coordinator] dx, dy in coord?.orbit(dx, dy) }
@@ -1026,6 +1027,27 @@ func loadSTL(_ url: URL) -> SCNGeometry? {
 /// SCNView som rapporterar musens läge (för att lysa upp ytan under pekaren).
 final class HoverSCNView: SCNView {
     var onHover: ((NSPoint?) -> Void)?
+    /// Anropas i fönstrets layoutpass, efter att vyn fått ny storlek/plats men före nästa bild ritas.
+    var onLayout: (() -> Void)?
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); needsLayout = true; onLayout?() }
+    override func setFrameOrigin(_ newOrigin: NSPoint) { super.setFrameOrigin(newOrigin); onLayout?() }
+    override func layout() { super.layout(); onLayout?() }
+    override func viewDidEndLiveResize() { super.viewDidEndLiveResize(); onLayout?() }
+    /// SwiftUI flyttar vyns värdvy (inte själva SCNView:n) när en panel försvinner – följ alla förfäders ramar.
+    private var ramObs: [NSObjectProtocol] = []
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        ramObs.forEach { NotificationCenter.default.removeObserver($0) }
+        ramObs = []
+        var s = superview
+        while let v = s {
+            v.postsFrameChangedNotifications = true
+            ramObs.append(NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: v, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onLayout?() }
+            })
+            s = v.superview
+        }
+    }
     var onDragStart: (() -> Void)?
     var onDragEnd: (() -> Void)?
     var onScroll: (() -> Void)?
@@ -1117,7 +1139,7 @@ final class HoverSCNView: SCNView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         guard arDirekt(event) else {
-            if underPekaren { underPekaren = false; onHover?(nil) }
+            if underPekaren { underPekaren = false; onHover?(nil); Tips.dolj(self) }
             return
         }
         underPekaren = true
@@ -1128,6 +1150,7 @@ final class HoverSCNView: SCNView {
         super.mouseExited(with: event)
         underPekaren = false
         onHover?(nil)
+        Tips.dolj(self)
     }
 }
 
@@ -1182,7 +1205,4 @@ func worldBounds(_ root: SCNNode) -> (SIMD3<Float>, SIMD3<Float>) {
     return (lo, hi)
 }
 
-extension NSView {
-    /// Sätt tooltip bara när texten ändras – varje tilldelning startar om AppKits tooltip-hantering.
-    func satTips(_ s: String?) { if toolTip != s { toolTip = s } }
-}
+

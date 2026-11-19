@@ -205,10 +205,10 @@ struct Workspace: View {
             // ⇥: släck/tänd alla paneler; Esc tänder dem igen
             if run.screen == .projekt, e.keyCode == 48, e.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
                !(NSApp.keyWindow?.firstResponder is NSTextView), NSApp.keyWindow?.attachedSheet == nil {
-                withAnimation(.easeInOut(duration: 0.2)) { run.dolPaneler.toggle() }; return nil
+                run.dolPaneler.toggle(); return nil
             }
             if run.screen == .projekt, e.keyCode == 53, run.dolPaneler, NSApp.keyWindow?.attachedSheet == nil {
-                withAnimation(.easeInOut(duration: 0.2)) { run.dolPaneler = false }; return nil
+                run.dolPaneler = false; return nil
             }
             guard run.screen == .projekt, e.modifierFlags.intersection([.command, .control, .option]).isEmpty,
                   !(NSApp.keyWindow?.firstResponder is NSTextView), NSApp.keyWindow?.attachedSheet == nil,
@@ -307,7 +307,7 @@ struct ToolBar: View {
             sep
             Button { run.request("Hela") } label: { Image(systemName: "viewfinder") }
                 .buttonStyle(.borderless).tips("Hela modellen (⌘0, dubbelklick) · vyer: ⌘1–⌘7")
-            Button { withAnimation(.easeInOut(duration: 0.2)) { run.dolPaneler.toggle() } } label: {
+            Button { run.dolPaneler.toggle() } label: {
                 Image(systemName: run.dolPaneler ? "rectangle.inset.filled" : "rectangle.dashed")
             }
             .buttonStyle(.borderless)

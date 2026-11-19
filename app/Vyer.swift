@@ -135,6 +135,12 @@ struct Sidebar: View {
         .contextMenu {
             Button("Visa i Finder") { NSWorkspace.shared.activateFileViewerSelecting([s.id]) }
             Button("Kopiera sökväg") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(s.id.path, forType: .string) }
+            Divider()
+            if s.id.deletingLastPathComponent().standardizedFileURL != Hem.projektRot.standardizedFileURL {
+                Button("Flytta till projektmappen (\(Hem.projektRot.lastPathComponent))") { run.flyttaProjekt(s.id, till: Hem.projektRot) }
+            }
+            Button("Flytta till …") { run.valjOchFlytta(s.id) }
+            Divider()
             Button("Ta bort ur listan") { run.removeFromList(s.id) }
         }
         .tips(s.id.path)
@@ -484,39 +490,60 @@ struct ToastView: View {
 
 struct ShortcutsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    private let rows: [(String, String)] = [
-        ("⌘N", "Nytt modellprojekt"), ("⇧⌘N", "Ny skanning från video"), ("⌥⌘N", "Guidad skanning"), ("⌘O", "Öppna mapp"),
-        ("⌘Z · ⇧⌘Z", "Ångra / gör om (mått, fillet/fas, delar, visa/dölj, flytt, explode, opacitet, snitt, streck)"),
-        ("⌘B", "Bygg om delarna"), ("⌘Y", "Historik (git)"), ("⌘,", "Inställningar: projektmapp och git"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude"), ("⇧⌘R", "Visa projektet i Finder"),
-        ("⌘0", "Hela modellen (även dubbelklick)"), ("⌘1 … ⌘6", "Topp, fram, höger, bak, vänster, botten"), ("⌘7", "Perspektiv"),
-        ("V · M · D · G · P", "Verktyg: Välj (mått på det du klickar), Mät, Rita, Flytta tillfälligt, Peka (ny chattråd)"),
-        ("D, sedan dra", "Rita i vyn – starten fäster mot kanter; ⇧ = rak linje, mellanslag + dra = vrid, Esc = kasta ritningen"),
-        ("E", "Dra isär alla delar (explode) / ihop igen"), ("R", "Lägg tillbaka allt som flyttats"),
-        ("X", "Snitt av/på (plan efter aktuell vy)"), ("O", "Fäll ihop/ut objektträdet"),
-        ("⇥", "Släck alla paneler – bara modellen (Esc tänder igen)"),
-        ("Esc", "Tänd panelerna / avmarkera / rensa mätning / lämna fotoläget"),
-        ("Nyp / skrollhjul", "Zooma mot pekaren"),
-        ("⌘K", "Fotoläge av/på"), ("← →", "Föregående/nästa bild i fotoläget"),
-        ("⇧⌘F", "Dölj/visa projektlistan"),
-        ("Mellanslag / ↩", "Ta bild (guidad skanning)"), ("Volym upp", "Ta bild med Bluetooth-avtryckare (guidad skanning)"),
-        ("⌘/", "Den här listan"),
+    private typealias Grupp = (titel: String, ikon: String, rader: [(String, String)])
+    private let vanster: [Grupp] = [
+        ("Verktyg", "cursorarrow", [
+            ("V", "Välj – mått på det du klickar"), ("M", "Mät mellan två punkter"),
+            ("P", "Peka – A, B, C … till nästa chattmeddelande"), ("D", "Rita i vyn"), ("G", "Flytta del tillfälligt"),
+            ("Esc", "Avmarkera / rensa mätning och pekpunkter")]),
+        ("Rita", "pencil.tip", [
+            ("D, dra", "Rita – starten fäster mot kanter"), ("⇧", "Rak linje"), ("Mellanslag + dra", "Vrid vyn medan du ritar"),
+            ("Esc", "Kasta ritningen")]),
+        ("Vy", "cube", [
+            ("⌘0 · dubbelklick", "Hela modellen"), ("⌘1 … ⌘6", "Topp, fram, höger, bak, vänster, botten"), ("⌘7", "Perspektiv"),
+            ("Dra", "Vrid"), ("⌥-dra · högerdra", "Flytta vyn"), ("Nyp · skrolla", "Zooma mot pekaren"),
+            ("X", "Snitt av/på"), ("⌘K", "Fotoläge av/på"), ("← →", "Föregående/nästa foto i fotoläget")]),
     ]
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Kortkommandon").font(.title2.bold())
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
-                ForEach(rows, id: \.0) { k, t in
-                    GridRow {
-                        Text(k).font(.callout.monospaced()).foregroundStyle(.secondary)
-                        Text(t).font(.callout)
+    private let hoger: [Grupp] = [
+        ("Projekt", "folder", [
+            ("⌘N", "Nytt modellprojekt"), ("⌘O", "Öppna mapp"), ("⇧⌘R", "Visa projektet i Finder"),
+            ("⌘,", "Inställningar: projektmapp och git")]),
+        ("Ändra och spara", "arrow.uturn.backward", [
+            ("⌘Z", "Ångra"), ("⇧⌘Z", "Gör om"), ("⌘Y", "Historik – gå tillbaka till en tidigare version"),
+            ("⌘B", "Bygg om delarna"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude")]),
+        ("Delar", "square.stack.3d.up", [
+            ("E", "Dra isär alla delar / ihop igen"), ("R", "Lägg tillbaka allt som flyttats")]),
+        ("Paneler", "rectangle.dashed", [
+            ("⇥", "Släck alla paneler"), ("Esc", "Tänd panelerna igen"), ("O", "Objektträdet"), ("⇧⌘F", "Projektlistan")]),
+        ("Skanning", "camera", [
+            ("⇧⌘N", "Ny skanning från video"), ("⌥⌘N", "Guidad skanning"),
+            ("Mellanslag · ↩", "Ta bild (guidad)"), ("Volym upp", "Ta bild med Bluetooth-avtryckare")]),
+    ]
+    private func kolumn(_ g: [Grupp]) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(g, id: \.titel) { grupp in
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(grupp.titel, systemImage: grupp.ikon).font(.headline)
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                        ForEach(grupp.rader, id: \.1) { k, t in
+                            GridRow {
+                                Text(k).font(.callout.monospaced()).foregroundStyle(.secondary).frame(width: 128, alignment: .trailing)
+                                Text(t).font(.callout).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
                 }
             }
-            Text("3D-vyn: dra = vrid, ⌥-dra eller höger-dra = flytta, scrolla/nyp = zooma, klick = peka ut en plats.")
-                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack { Text("Kortkommandon").font(.title2.bold()); Spacer(); Text("⌘/ visar den här listan").font(.caption).foregroundStyle(.secondary) }
+            HStack(alignment: .top, spacing: 28) { kolumn(vanster); kolumn(hoger) }
+            Text("Bokstavstangenterna fungerar när du inte skriver i ett textfält.").font(.caption).foregroundStyle(.secondary)
             HStack { Spacer(); Button("Stäng") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
         .padding(20)
-        .frame(width: 460)
+        .frame(width: 860)
     }
 }

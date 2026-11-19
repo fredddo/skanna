@@ -6,6 +6,15 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Chatten (19 nov):** större och justerbar text (A−/A+), hela texten i varje meddelande, allt i en rullning.
+  Klara trådar och Claudes lösa meddelanden hamnar i *Historik*, grupperad per dag och sökbar. Varje meddelande visar tid.
+  Svar i en tråd kan ha bilaga och pekpunkter. "Claude arbetar" visas bara medan Claude faktiskt arbetar;
+  har claude.json stått still i 30 min visas en varning i stället.
+- **Flytta projekt:** högerklick i projektlistan → *Flytta till …* / *Flytta till projektmappen*, eller Projekt-menyn.
+  Hela mappen flyttas. Det gamla repot får en commit för flytten och det nya en första commit. Byter du projektmapp i
+  Inställningar erbjuder appen att flytta projekten dit.
+- **Tooltips** ritas nu av appen själv. **Paneler av/på (⇥)** kompenseras i samma layoutpass, så modellen ska inte darra.
+  **Kortkommandon** (⌘/) är grupperade. **Objektlistan:** vald rad visar hela beskrivningen, och tooltipen visar den alltid.
 - **Var filerna sparas + historik i git:** i Inställningar (⌘,) väljer du projektmappen, och appen rekommenderar starkt
   ett git-repo (knappen *Gör projektmappen till git-repo*). Nya videoskanningar hamnar också där om du vill.
   I ett repo gör appen en commit när en ändring har satt sig – Claude har byggt färdigt, ett mått, ett namn,

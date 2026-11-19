@@ -134,7 +134,7 @@ enum Git {
 }
 
 extension Runner {
-    private static let gitKo = DispatchQueue(label: "skanna.historik")
+    static let gitKo = DispatchQueue(label: "skanna.historik")
 
     var historikPa: Bool { if case .aktiv = gitLage { return true }; return false }
 
@@ -363,6 +363,7 @@ struct InstallningarVy: View {
     @AppStorage("skanningarIProjektmappen") private var skanningarIRot = true
     @State private var rotLage: GitLage = .okand
     @State private var fel: String?
+    @State private var attFlytta: (fran: URL, projekt: [URL])?
 
     private var rot: URL { Hem.projektRot }
 
@@ -379,8 +380,8 @@ struct InstallningarVy: View {
                     }
                 }
                 Toggle("Lägg nya videoskanningar i projektmappen (annars bredvid klippet)", isOn: $skanningarIRot)
-                Text("Nya modellprojekt, guidade skanningar och – om rutan är ikryssad – videoskanningar hamnar här. Befintliga projekt ligger kvar där de är.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Nya modellprojekt, guidade skanningar och – om rutan är ikryssad – videoskanningar hamnar här. Ett befintligt projekt flyttar du med högerklick i projektlistan → Flytta till … (eller Projekt-menyn). Hela mappen flyttas, och historiken fortsätter i det nya repot.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } header: { Text("Var filerna sparas") }
 
             Section {
@@ -406,6 +407,17 @@ struct InstallningarVy: View {
         .formStyle(.grouped)
         .frame(width: 560)
         .onAppear(perform: kolla)
+        .confirmationDialog("Flytta också de \(attFlytta?.projekt.count ?? 0) projekten från \(attFlytta?.fran.path ?? "") hit?",
+                            isPresented: Binding(get: { attFlytta != nil }, set: { if !$0 { attFlytta = nil } })) {
+            Button("Flytta projekten") {
+                if let a = attFlytta { for p in a.projekt { run.flyttaProjekt(p, till: rot) } }
+                attFlytta = nil
+            }
+            Button("Låt dem ligga kvar", role: .cancel) { attFlytta = nil }
+        } message: {
+            Text((attFlytta?.projekt.map(\.lastPathComponent) ?? []).joined(separator: ", ")
+                 + "\n\nHela mapparna flyttas. Gamla versioner finns kvar i det gamla repots historik.")
+        }
     }
 
     private func kolla() {
@@ -427,9 +439,112 @@ struct InstallningarVy: View {
         panel.prompt = "Välj"
         panel.message = "Välj var nya projekt ska sparas – helst i ett git-repo"
         if panel.runModal() == .OK, let u = panel.url {
+            let gammal = rot
             rotStig = u.path
             run.refreshScans()
             kolla()
+            let p = Runner.projektI(gammal)
+            if !p.isEmpty, u.standardizedFileURL != gammal.standardizedFileURL { attFlytta = (gammal, p) }
+        }
+    }
+}
+
+// MARK: Flytta projekt (till en annan mapp eller ett annat git-repo)
+
+extension Runner {
+    /// Projekt (mappar med projekt.json eller *.modell) som ligger direkt i `dir`.
+    static func projektI(_ dir: URL) -> [URL] {
+        let fm = FileManager.default
+        return ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []).filter {
+            fm.fileExists(atPath: $0.appendingPathComponent("projekt.json").path) || $0.lastPathComponent.contains(".modell")
+        }
+    }
+
+    /// Fråga var projektet ska ligga och flytta det dit.
+    func valjOchFlytta(_ src: URL) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.directoryURL = Hem.projektRot
+        panel.prompt = "Flytta hit"
+        panel.message = "Välj mappen som \"\(src.lastPathComponent)\" ska flyttas in i – helst i ett git-repo, så får projektet historik"
+        guard panel.runModal() == .OK, let u = panel.url else { return }
+        flyttaProjekt(src, till: u)
+    }
+
+    /// Flytta en projektmapp in i `dir`. Hela mappen flyttas (bilder, video, mesh, cad/). Historiken:
+    ///  · ändringar som inte är sparade committas först där projektet ligger nu
+    ///  · i det gamla repot blir flytten en commit ("Flyttat till …"); gamla versioner finns kvar där
+    ///  · i det nya repot skrivs projektets .gitignore och en första commit ("Flyttat hit från …")
+    func flyttaProjekt(_ src0: URL, till dir: URL, klar: (() -> Void)? = nil) {
+        let fm = FileManager.default
+        let src = src0.standardizedFileURL
+        let dest = dir.standardizedFileURL.appendingPathComponent(src.lastPathComponent)
+        if dest.path == src.path { return }
+        if dest.path.hasPrefix(src.path + "/") { error = "Kan inte flytta ett projekt in i sig självt."; return }
+        if fm.fileExists(atPath: dest.path) { error = "Det finns redan en mapp \"\(src.lastPathComponent)\" i \(dir.path)."; return }
+        let aktuell = output?.standardizedFileURL == src
+        if aktuell { historikSpara(vanta: true) } else { historikSpara(src, vanta: true) }
+        let byggs = fm.fileExists(atPath: src.appendingPathComponent("cad/skript").path)
+        if aktuell { output = nil; model = nil }
+        toast = "Flyttar \(src.lastPathComponent) …"
+        Runner.gitKo.async { [weak self] in
+            let gammalRot = Git.finns ? Git.rot(src) : nil
+            var fel: String?
+            do {
+                try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+                try fm.moveItem(at: src, to: dest)
+            } catch { fel = error.localizedDescription }
+            var notis = ""
+            if fel == nil, Git.finns {
+                let nyRot = Git.rot(dest)
+                func rel(_ u: URL, _ r: URL) -> String { String(u.path.dropFirst(r.standardizedFileURL.path.count + 1)) }
+                // gamla repot: flytten blir en commit (bara projektets sökväg; annat i repot rörs inte)
+                if let g = gammalRot, !Git.kor(["ls-files", "--", rel(src, g)], i: g).ut.isEmpty {
+                    let r = rel(src, g)
+                    var stigar = [r]
+                    if let n = nyRot, n.standardizedFileURL == g.standardizedFileURL {   // samma repo: flytten blir en enda commit
+                        Git.skrivIgnore(dest, byggs: byggs)
+                        stigar.append(rel(dest, n))
+                    }
+                    _ = Git.kor(["add", "-A", "--"] + stigar, i: g)
+                    var args: [String] = []
+                    if Git.kor(["config", "user.email"], i: g).ut.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        args += ["-c", "user.name=Skanna", "-c", "user.email=skanna@lokal"]
+                    }
+                    _ = Git.kor(args + ["commit", "-q", "--no-verify", "-m", "Flyttat \(src.lastPathComponent) till \(dest.deletingLastPathComponent().path)", "--"] + stigar, i: g)
+                    notis = " Den tidigare historiken finns kvar i \(g.path)."
+                }
+                // nytt repo: .gitignore och första commit
+                if let n = nyRot, n.standardizedFileURL != gammalRot?.standardizedFileURL,
+                   !Git.kor(["check-ignore", "-q", "--no-index", "cad/parametrar-anvandare.json"], i: dest).ok {
+                    Git.skrivIgnore(dest, byggs: byggs)
+                    Git.commit(dest, rubrik: "Flyttat hit från \(src.deletingLastPathComponent().path)", text: "")
+                } else if nyRot == nil {
+                    notis += " Den nya mappen är inget git-repo – ingen historik där."
+                }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let fel {
+                    self.error = "Kunde inte flytta: " + fel
+                    if aktuell { self.select(src) }
+                    return
+                }
+                var extra = UserDefaults.standard.stringArray(forKey: "extraScanFolders") ?? []
+                extra.removeAll { $0 == src.path }
+                if dest.deletingLastPathComponent().standardizedFileURL != Hem.projektRot.standardizedFileURL { extra.append(dest.path) }
+                UserDefaults.standard.set(extra, forKey: "extraScanFolders")
+                if UserDefaults.standard.string(forKey: "senasteProjekt") == src.path { UserDefaults.standard.set(dest.path, forKey: "senasteProjekt") }
+                // inställningar som sparats per projektsökväg följer med
+                let d = UserDefaults.standard
+                for (k, v) in d.dictionaryRepresentation() where k.hasSuffix(":" + src.path) {
+                    d.set(v, forKey: String(k.dropLast(src.path.count)) + dest.path); d.removeObject(forKey: k)
+                }
+                self.refreshScans()
+                if aktuell { self.select(dest) }
+                self.toast = "Flyttat till \(dest.deletingLastPathComponent().lastPathComponent).\(notis)"
+                klar?()
+            }
         }
     }
 }

@@ -223,7 +223,9 @@ struct ObjektPanel: View {
                     Text(name).lineLimit(1)
                         .simultaneousGesture(TapGesture(count: 2).onEnded { if renamable { newName = name; renaming = id } })
                 }
-                if let sub { Text(sub).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                // hela texten när raden är vald (annars en rad), och alltid i tooltipen
+                if let sub { Text(sub).font(.caption2).foregroundStyle(.secondary).lineLimit(selected ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: selected) }
             }
             .opacity(on ? 1 : 0.45)
             Spacer(minLength: 0)
@@ -237,8 +239,9 @@ struct ObjektPanel: View {
         .background(RoundedRectangle(cornerRadius: 5).fill(selected ? Color.accentColor.opacity(0.2) : Color.clear))
         .contentShape(Rectangle())
         .onTapGesture { run.selectPart(id) }
-        .tips(renamable ? "Klicka för att välja · dubbelklicka på namnet för att byta namn · dra för att flytta i listan · ögat tänder/släcker"
-                        : "Klicka för att välja (opacitet och mått gäller vald) · ögat tänder/släcker")
+        .tips((sub.map { "\(name)\n\($0)\n\n" } ?? "")
+              + (renamable ? "Klicka för att välja och se hela texten · dubbelklicka på namnet för att byta namn · dra för att flytta i listan · ögat tänder/släcker"
+                           : "Klicka för att välja och se hela texten · ögat tänder/släcker"))
     }
 }
 

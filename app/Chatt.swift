@@ -94,6 +94,8 @@ extension Runner {
         }
         var keys = Array(userBy.keys)
         for q in qs where userBy[q.id] == nil { keys.append(q.id) }
+        let senasteClaude = (claude?.meddelanden ?? []).map(\.tid).max() ?? ""
+        let claudeArbetarNu = claudeArbetar
         var out: [ChatThread] = []
         for key in keys {
             let q = qs.first { $0.id == key }
@@ -114,15 +116,24 @@ extension Runner {
             }
             let closedByUser = isQ ? closedQuestions.contains(key) : closedLocal.contains(key)
             let lastEntry = entries.last!
-            var derived = ChatStatus.klar
-            if !lastEntry.fromClaude, let s = lastEntry.svar { derived = isRead(s) ? .klar : (isReceived(s) ? .arbetar : .vantar) }
+            // Status. Claude markerar trådar i claude.json, men glömmer ibland att släppa "arbetar" – och en äldre
+            // "klar" får inte dölja ett nytt svar från dig. Därför vägs markeringen mot tiderna:
+            //  · ditt meddelande sist, ej mottaget                 → väntar på Claude
+            //  · ditt meddelande sist, mottaget, Claude har skrivit något senare (var som helst) och kallar tråden klar → klar
+            //  · ditt meddelande sist, mottaget, Claude arbetar nu   → arbetar, annars → väntar
+            //  · Claudes meddelande sist                           → klar, utom när Claude uttryckligen frågar (fraga)
             let explicit = ChatStatus.parse(claude?.tradar?[key]?.status)
             var status: ChatStatus
             if closedByUser { status = .klar }
-            else if derived != .klar, explicit != .arbetar { status = derived }
-            else if let e = explicit { status = e }
-            else if isQ { status = q?.besvarad == true ? .klar : (entries.contains { !$0.fromClaude } ? .arbetar : .fraga) }   // besvarad av dig men inte avbockad av Claude än
-            else { status = derived }
+            else if !lastEntry.fromClaude, let s = lastEntry.svar {
+                if isRead(s) { status = .klar }
+                else if !isReceived(s) { status = .vantar }
+                else if explicit == .klar, senasteClaude > s.tid { status = .klar }
+                else { status = claudeArbetarNu ? .arbetar : .vantar }
+            } else if isQ, q?.besvarad != true, !entries.contains(where: { !$0.fromClaude }) { status = .fraga }
+            else if explicit == .fraga { status = .fraga }
+            else if isQ, q?.besvarad != true, explicit == nil { status = .fraga }
+            else { status = .klar }
             var title = claude?.tradar?[key]?.titel ?? ""
             if title.isEmpty { title = q?.text ?? first?.svar ?? "" }
             if title.isEmpty { title = first?.fraga ?? "Tråd" }
@@ -132,8 +143,28 @@ extension Runner {
                                   markering: !(q?.markering ?? []).isEmpty, closedByUser: closedByUser,
                                   lastTid: rest.last?.tid ?? ""))
         }
+        // Claudes lösa meddelanden (inte svar på något) blir egna, avslutade trådar i historiken
+        for m in pending {
+            var t = String(m.text.split(separator: "\n").first ?? "").trimmingCharacters(in: .whitespaces)
+            if t.count > 48 { t = String(t.prefix(46)) + "…" }
+            out.append(ChatThread(id: "claude-" + m.tid, isQuestion: false, title: t, status: .klar,
+                                  entries: [ChatEntry(id: "c" + m.tid, tid: m.tid, fromClaude: true, isQuestion: false, text: m.text, svar: nil)],
+                                  plats: nil, kant: nil, markering: false, closedByUser: false, lastTid: m.tid))
+        }
         out.sort { $0.lastTid > $1.lastTid }
-        return (out, pending, log)
+        return (out, [], log)
+    }
+
+    /// Arbetar Claude just nu? claude.json säger "arbetar" och har ändrats den senaste halvtimmen
+    /// (annars har Claude troligen avbrutits utan att städa – då visas det i stället för ett evigt "arbetar").
+    var claudeArbetar: Bool { claude?.status == "arbetar" && !claudeTyst }
+    var claudeTyst: Bool {
+        guard claude?.status == "arbetar", let f = cadFolder?.appendingPathComponent("claude.json"),
+              let d = (try? FileManager.default.attributesOfItem(atPath: f.path))?[.modificationDate] as? Date else { return false }
+        return Date().timeIntervalSince(d) > 30 * 60
+    }
+    var claudeSenast: Date? {
+        cadFolder.flatMap { (try? FileManager.default.attributesOfItem(atPath: $0.appendingPathComponent("claude.json").path))?[.modificationDate] as? Date }
     }
 
     // MARK: Förankring och sändning
@@ -165,11 +196,13 @@ extension Runner {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty || attachment != nil || (thread == nil && ritning != nil) else { return }
         if let th = thread {
+            let fler = anchor != nil && anchor?.point == pick ? Array(pekpunkter.dropFirst()) : []
             if th.isQuestion {
-                send(questionID: th.id, question: th.title, text: t, attachment: attachment)
+                send(questionID: th.id, question: th.title, text: t, attachment: attachment, plats: anchor?.point, kant: anchor?.kant, fler: fler)
                 if closedQuestions.contains(th.id) { reopenQuestion(th.id) }
             } else {
-                send(questionID: "meddelande", question: th.title, text: t, attachment: attachment, trad: th.id)
+                send(questionID: "meddelande", question: th.title, text: t, attachment: attachment, plats: anchor?.point, trad: th.id,
+                     kant: anchor?.kant, fler: fler)
                 if th.closedByUser { setThreadClosed(th.id, false) }
             }
         } else if let r = ritning {
@@ -195,21 +228,47 @@ extension Runner {
 
 // MARK: - Panelen
 
-private struct HojdNyckel: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+/// Chattens textstorlek (A− / A+ i panelens överkant), delas av alla chattvyer.
+enum ChattText {
+    static let nyckel = "chattTextstorlek"
+    static let standard = 13.0
+    static let spann = 11.0...20.0
+}
+
+/// "15:16" i dag, "i går 15:16", annars "17 nov 15:16".
+func chattTid(_ iso: String) -> String {
+    guard iso.count >= 16 else { return "" }
+    let dag = String(iso.prefix(10)), klocka = String(iso.dropFirst(11).prefix(5))
+    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+    let idag = f.string(from: Date()), igar = f.string(from: Date().addingTimeInterval(-86400))
+    if dag == idag { return klocka }
+    if dag == igar { return "i går " + klocka }
+    guard let d = f.date(from: dag) else { return iso }
+    let g = DateFormatter(); g.locale = Locale(identifier: "sv_SE"); g.dateFormat = "d MMM"
+    return g.string(from: d) + " " + klocka
+}
+
+func chattDag(_ iso: String) -> String {
+    guard iso.count >= 10 else { return "Utan datum" }
+    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+    let dag = String(iso.prefix(10))
+    if dag == f.string(from: Date()) { return "I dag" }
+    if dag == f.string(from: Date().addingTimeInterval(-86400)) { return "I går" }
+    guard let d = f.date(from: dag) else { return dag }
+    let g = DateFormatter(); g.locale = Locale(identifier: "sv_SE"); g.dateFormat = "EEEE d MMMM"
+    return g.string(from: d).prefix(1).uppercased() + g.string(from: d).dropFirst()
 }
 
 struct ChattPanel: View {
     @ObservedObject var run: Runner
     @State private var closedLocal: Set<String> = []
-    @State private var showDone: Bool
+    @AppStorage("chattHistorikOppen") private var showDone = true
     @State private var showLog = false
-    @State private var activeHeight: CGFloat = 0
+    @State private var sok = ""
+    @AppStorage(ChattText.nyckel) private var storlek = ChattText.standard
 
     init(run: Runner, avslutadeOppna: Bool = false) {
         self.run = run
-        _showDone = State(initialValue: avslutadeOppna)
     }
 
     var body: some View {
@@ -218,89 +277,120 @@ struct ChattPanel: View {
         let done = data.threads.filter { !$0.status.aktiv }
         VStack(alignment: .leading, spacing: 8) {
             statusLine
-            if !active.isEmpty {
-                ScrollView {
-                    VStack(spacing: 6) {
-                        ForEach(active) { th in
-                            ChattTrad(run: run, thread: th, finished: false, onClose: { close(th) }, onReopen: {})
-                                .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .bottom).combined(with: .opacity)))
-                        }
-                    }
-                    .background(GeometryReader { Color.clear.preference(key: HojdNyckel.self, value: $0.size.height) })
-                }
-                .frame(height: min(max(activeHeight, 40), 300))
-                .onPreferenceChange(HojdNyckel.self) { activeHeight = $0 }
-            }
+            // Allt i en rullning: aktiva trådar överst (hela texten), historiken under. Inga dolda höjdgränser.
             ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    if data.threads.isEmpty && data.loose.isEmpty && data.log.isEmpty { emptyState }
-                    ForEach(data.loose) { r in ClaudeBubble(text: r.text) }
-                    if !done.isEmpty { finishedGroup(done) }
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    if data.threads.isEmpty && data.log.isEmpty { emptyState }
+                    ForEach(active) { th in
+                        ChattTrad(run: run, thread: th, finished: false, onClose: { close(th) }, onReopen: {})
+                            .transition(.opacity)
+                    }
+                    if !done.isEmpty { historik(done) }
                     if !data.log.isEmpty { logGroup(data.log) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 2)
             }
             ChattSkrivfalt(run: run)
         }
         .padding(10)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
-        .animation(.easeInOut(duration: 0.3), value: data.threads.map { $0.id + ($0.status.aktiv ? "a" : "k") })
+        .animation(.easeInOut(duration: 0.25), value: data.threads.map { $0.id + ($0.status.aktiv ? "a" : "k") })
         .onAppear { closedLocal = run.loadClosedThreads() }
         .onChange(of: run.output) { _, _ in closedLocal = run.loadClosedThreads() }
         .onChange(of: run.cadStamp) { _, _ in closedLocal = run.loadClosedThreads() }
     }
 
     private func close(_ th: ChatThread) {
-        withAnimation(.easeInOut(duration: 0.3)) {
+        withAnimation(.easeInOut(duration: 0.25)) {
             if th.isQuestion { run.closeQuestion(th.id, th.title); run.reloadCad() }
             else { run.setThreadClosed(th.id, true); closedLocal = run.loadClosedThreads() }
         }
     }
 
+    private var storleksKnappar: some View {
+        HStack(spacing: 0) {
+            Button { storlek = max(ChattText.spann.lowerBound, storlek - 1) } label: { Image(systemName: "textformat.size.smaller") }
+                .tips("Mindre text i chatten")
+            Button { storlek = min(ChattText.spann.upperBound, storlek + 1) } label: { Image(systemName: "textformat.size.larger") }
+                .tips("Större text i chatten")
+        }
+        .buttonStyle(.borderless).foregroundStyle(.secondary)
+    }
+
     // Claudes övergripande status, tunn rad
     @ViewBuilder private var statusLine: some View {
-        if run.claude == nil {
-            Button { run.copyClaudeText() } label: { Label("Kopiera uppdrag till Claude", systemImage: "doc.on.clipboard") }
-                .tips("Klistra in i chatten med Claude (Claude Code). Claude läser då AGENT.md och svarar här i appen.")
-        } else if let st = run.claude?.status {
-            HStack(spacing: 6) {
-                if st == "arbetar" { ProgressView().controlSize(.mini) }
-                else { Image(systemName: st == "klar" ? "checkmark.circle.fill" : "hourglass").foregroundStyle(st == "klar" ? .green : .orange).font(.caption) }
-                Text(run.claude?.status_text ?? st.capitalized).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                Spacer(minLength: 0)
+        HStack(spacing: 6) {
+            if run.claude == nil {
+                Button { run.copyClaudeText() } label: { Label("Kopiera uppdrag till Claude", systemImage: "doc.on.clipboard") }
+                    .tips("Klistra in i chatten med Claude (Claude Code). Claude läser då AGENT.md och svarar här i appen.")
+            } else if let st = run.claude?.status {
+                HStack(spacing: 6) {
+                    if run.claudeTyst {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
+                        Text("Claude har inte hörts av sedan \(run.claudeSenast.map { chattTid(ISO8601DateFormatter().string(from: $0).replacingOccurrences(of: "Z", with: "")) } ?? "länge") – kör Claude fortfarande?")
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    } else {
+                        if st == "arbetar" { ProgressView().controlSize(.mini) }
+                        else { Image(systemName: st == "klar" ? "checkmark.circle.fill" : "hourglass").foregroundStyle(st == "klar" ? .green : .orange).font(.caption) }
+                        Text(run.claude?.status_text ?? st.capitalized).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Capsule().fill(Color.purple.opacity(0.08)))
+                .tips(run.claude?.status_text ?? st)
             }
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Capsule().fill(Color.purple.opacity(0.08)))
+            Spacer(minLength: 0)
+            storleksKnappar
         }
     }
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Prata med Claude", systemImage: "bubble.left.and.bubble.right").font(.callout.bold())
+            Label("Prata med Claude", systemImage: "bubble.left.and.bubble.right").font(.system(size: storlek, weight: .bold))
             Text("Skriv nedan vad du vill ändra eller bygga. Varje meddelande blir en egen tråd som Claude svarar i.")
-            Text("Peka eller markera något i 3D-vyn först, så följer platsen med och Claude vet exakt vad du menar.")
-            Text("Flera trådar kan pågå samtidigt. Aktiva ligger överst; klara fälls ihop här.")
+            Text("Peka (P) på ett eller flera ställen i 3D-vyn först, så följer platserna med och Claude vet exakt vad du menar.")
+            Text("Aktiva trådar ligger överst. Klara trådar hamnar i Historik, sorterade per dag.")
         }
-        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        .font(.system(size: storlek - 1)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         .padding(8).frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.06)))
     }
 
-    private func finishedGroup(_ done: [ChatThread]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    /// Historiken: alla avslutade trådar per dag, nyast först, med sökning i all text.
+    private func historik(_ done: [ChatThread]) -> some View {
+        let q = sok.trimmingCharacters(in: .whitespaces).lowercased()
+        let traffar = q.isEmpty ? done : done.filter { th in
+            th.title.lowercased().contains(q) || th.entries.contains { $0.text.lowercased().contains(q) }
+        }
+        var dagar: [(String, [ChatThread])] = []
+        for th in traffar {
+            let d = chattDag(th.lastTid)
+            if dagar.last?.0 == d { dagar[dagar.count - 1].1.append(th) } else { dagar.append((d, [th])) }
+        }
+        return VStack(alignment: .leading, spacing: 6) {
             Button { withAnimation(.easeInOut(duration: 0.2)) { showDone.toggle() } } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.right").rotationEffect(.degrees(showDone ? 90 : 0)).font(.caption2.bold())
-                    Text("Avslutade (\(done.count))").font(.subheadline.bold())
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right").rotationEffect(.degrees(showDone ? 90 : 0)).font(.caption.bold())
+                    Image(systemName: "clock")
+                    Text("Historik").font(.system(size: storlek, weight: .bold))
+                    Text("\(done.count) trådar").font(.system(size: storlek - 2)).foregroundStyle(.secondary)
                     Spacer()
-                }.foregroundStyle(.green).contentShape(Rectangle())
+                }.contentShape(Rectangle())
             }.buttonStyle(.plain)
+            .tips("Avslutade trådar och Claudes meddelanden, per dag. Klicka på en tråd för att läsa hela.")
             if showDone {
-                ForEach(done) { th in
-                    ChattTrad(run: run, thread: th, finished: true, onClose: {},
-                              onReopen: { run.setThreadClosed(th.id, false); if th.isQuestion { run.reopenQuestion(th.id) }; closedLocal = run.loadClosedThreads() })
-                        .transition(.opacity)
+                TextField("Sök i historiken …", text: $sok).textFieldStyle(.roundedBorder).font(.system(size: storlek - 1))
+                if traffar.isEmpty { Text("Inget hittades.").font(.system(size: storlek - 1)).foregroundStyle(.secondary) }
+                ForEach(dagar, id: \.0) { dag, tradar in
+                    Text(dag).font(.system(size: storlek - 2, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 4)
+                    ForEach(tradar) { th in
+                        ChattTrad(run: run, thread: th, finished: true, onClose: {},
+                                  onReopen: { run.setThreadClosed(th.id, false); if th.isQuestion { run.reopenQuestion(th.id) }; closedLocal = run.loadClosedThreads() },
+                                  startOppen: !q.isEmpty)
+                    }
                 }
             }
         }
@@ -312,14 +402,17 @@ struct ChattPanel: View {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.right").rotationEffect(.degrees(showLog ? 90 : 0)).font(.caption2.bold())
                     Image(systemName: "slider.horizontal.3").font(.caption)
-                    Text("Ändrade mått (\(log.count))").font(.caption.bold())
+                    Text("Ändrade mått (\(log.count))").font(.system(size: storlek - 1, weight: .bold))
                     Spacer()
                 }.foregroundStyle(.secondary).contentShape(Rectangle())
             }.buttonStyle(.plain)
             if showLog {
                 ForEach(log.reversed()) { a in
-                    Text("Ändrat: " + a.svar.replacingOccurrences(of: " (ändrat i appen)", with: ""))
-                        .font(.caption2.monospacedDigit()).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(chattTid(a.tid)).font(.system(size: storlek - 3).monospacedDigit()).foregroundStyle(.tertiary)
+                        Text(a.svar.replacingOccurrences(of: " (ändrat i appen)", with: ""))
+                            .font(.system(size: storlek - 2).monospacedDigit()).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -334,131 +427,179 @@ struct ChattTrad: View {
     let finished: Bool
     let onClose: () -> Void
     let onReopen: () -> Void
+    var startOppen = false
     @State private var expanded = false
     @State private var draft = ""
+    @State private var attachment: URL?
     @FocusState private var focused: Bool
+    @AppStorage(ChattText.nyckel) private var storlek = ChattText.standard
 
     private var color: Color { thread.isQuestion && thread.status == .fraga ? .orange : thread.status.color }
     private var selected: Bool { thread.isQuestion && run.focusQuestion == thread.id }
+    private var oppen: Bool { expanded || startOppen }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             header
-            if finished && !expanded {
+            if finished && !oppen {
                 EmptyView()
             } else {
                 let shown = shownEntries
-                if !expanded && thread.entries.count > shown.count {
-                    Text("… \(thread.entries.count - shown.count) tidigare").font(.caption2).foregroundStyle(.tertiary)
+                if !oppen && thread.entries.count > shown.count {
+                    Button { withAnimation(.easeInOut(duration: 0.2)) { expanded = true } } label: {
+                        Text("Visa \(thread.entries.count - shown.count) tidigare meddelanden").font(.system(size: storlek - 2))
+                    }.buttonStyle(.link)
                 }
-                ForEach(shown) { e in ChattBubbla(run: run, entry: e, full: expanded) }
-                replyField
+                ForEach(shown) { e in ChattBubbla(run: run, entry: e) }
+                if !finished || expanded { replyField }
             }
         }
-        .padding(7)
-        .background(RoundedRectangle(cornerRadius: 7).fill(finished ? Color.green.opacity(0.05) : color.opacity(0.07)))
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(selected ? Color.red : (finished ? Color.clear : color.opacity(0.35)), lineWidth: selected ? 1.5 : 1))
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(finished ? Color.secondary.opacity(0.05) : color.opacity(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.red : (finished ? Color.secondary.opacity(0.15) : color.opacity(0.35)), lineWidth: selected ? 1.5 : 1))
     }
 
-    /// Hopfälld: de två senaste meddelandena (frågetexten följer alltid med); utfälld: alla.
+    /// Aktiv och hopfälld: de två senaste meddelandena i sin helhet (frågetexten följer alltid med). Utfälld: alla.
     private var shownEntries: [ChatEntry] {
-        if expanded { return thread.entries }
+        if oppen { return thread.entries }
         var shown = Array(thread.entries.suffix(2))
         if thread.isQuestion, let q = thread.entries.first, shown.first?.id != q.id { shown = [q] + shown.suffix(1) }
         return shown
     }
 
     private var header: some View {
-        HStack(spacing: 5) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             if finished {
-                Image(systemName: thread.closedByUser ? "xmark.circle.fill" : "checkmark").foregroundStyle(thread.closedByUser ? Color.secondary : Color.green).font(.caption.bold())
-                Text(thread.title).font(.caption.bold()).lineLimit(1)
-                Text("· \(thread.count) \(thread.count == 1 ? "meddelande" : "meddelanden")").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Image(systemName: thread.closedByUser ? "xmark.circle.fill" : (thread.id.hasPrefix("claude-") ? "sparkles" : "checkmark"))
+                    .foregroundStyle(thread.closedByUser ? Color.secondary : (thread.id.hasPrefix("claude-") ? Color.purple : Color.green))
+                    .font(.system(size: storlek - 2, weight: .bold))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(thread.title).font(.system(size: storlek - 1, weight: .semibold)).lineLimit(oppen ? nil : 1)
+                    Text([chattTid(thread.lastTid), "\(thread.count) \(thread.count == 1 ? "meddelande" : "meddelanden")"].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.system(size: storlek - 3)).foregroundStyle(.secondary)
+                }
             } else {
                 if thread.status == .arbetar { ProgressView().controlSize(.mini) }
-                else { Image(systemName: thread.status.icon).foregroundStyle(color).font(.caption) }
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(thread.title).font(.callout.bold()).lineLimit(expanded ? 3 : 1)
-                    Text(thread.status.text).font(.caption2).foregroundStyle(color)
+                else { Image(systemName: thread.status.icon).foregroundStyle(color).font(.system(size: storlek - 1)) }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(thread.title).font(.system(size: storlek, weight: .bold)).fixedSize(horizontal: false, vertical: true)
+                    Text([thread.status.text, chattTid(thread.lastTid)].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.system(size: storlek - 3)).foregroundStyle(color)
                 }
             }
             Spacer(minLength: 0)
-            if thread.canFocus { Image(systemName: "mappin.and.ellipse").font(.caption2).foregroundStyle(.red.opacity(0.7)) }
-            if finished && expanded {
-                Button("Öppna igen") { onReopen(); expanded = true }.buttonStyle(.link).font(.caption)
+            if thread.canFocus { Image(systemName: "mappin.and.ellipse").font(.system(size: storlek - 2)).foregroundStyle(.red.opacity(0.7)) }
+            if finished && oppen && !thread.id.hasPrefix("claude-") {
+                Button("Öppna igen") { onReopen(); expanded = true }.buttonStyle(.link).font(.system(size: storlek - 2))
             }
             if !finished {
-                Button(action: onClose) { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.secondary).font(.caption)
-                    .tips("Avsluta tråden")
+                Button(action: onClose) { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    .tips("Avsluta tråden (den flyttas till Historik)")
             }
-            Image(systemName: "chevron.down").rotationEffect(.degrees(expanded ? 180 : 0)).font(.caption2).foregroundStyle(.secondary)
+            Image(systemName: "chevron.down").rotationEffect(.degrees(oppen ? 180 : 0)).font(.caption2).foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
         .onTapGesture {
             withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
             run.chatFocus(thread)
         }
-        .tips(thread.canFocus ? "Klicka för att visa platsen i 3D-vyn och fälla ut tråden" : "Fäll ut tråden")
+        .tips(thread.canFocus ? "Klicka för att visa platsen i 3D-vyn och fälla ut/ihop tråden" : "Fäll ut/ihop tråden")
     }
 
+    /// Svarsfältet: text, bilaga och – om du pekat (P) – platserna, precis som när en ny tråd startas.
     private var replyField: some View {
-        HStack(spacing: 4) {
-            TextField(thread.isQuestion ? "Ditt svar …" : "Svara …", text: $draft, axis: .vertical)
-                .lineLimit(1...4).textFieldStyle(.roundedBorder).font(.caption).focused($focused).onSubmit(send)
-            Button(action: send) { Image(systemName: "paperplane.fill") }.buttonStyle(.borderless)
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty).tips("Skicka (↩)")
+        let anchor = run.pekpunkter.isEmpty ? nil : run.chatAnchor
+        return VStack(alignment: .leading, spacing: 3) {
+            if let a = anchor, focused || !draft.isEmpty {
+                Text("📍 " + a.text + " följer med svaret").font(.system(size: storlek - 3).monospacedDigit()).foregroundStyle(.red.opacity(0.8))
+                    .lineLimit(3)
+            }
+            HStack(spacing: 4) {
+                TextField(thread.isQuestion ? "Ditt svar …" : "Svara i tråden …", text: $draft, axis: .vertical)
+                    .lineLimit(1...6).textFieldStyle(.roundedBorder).font(.system(size: storlek - 1)).focused($focused).onSubmit { send(anchor) }
+                Button { attachment = run.pickAttachment() } label: { Image(systemName: attachment == nil ? "paperclip" : "paperclip.circle.fill") }
+                    .buttonStyle(.borderless).tips(attachment.map { "Bifogas: \($0.lastPathComponent) – klicka för att byta" } ?? "Bifoga foto eller fil till svaret")
+                Button { send(anchor) } label: { Image(systemName: "paperplane.fill") }.buttonStyle(.borderless)
+                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty && attachment == nil).tips("Skicka (↩), ny rad med ⇧↩")
+            }
+            if let a = attachment {
+                HStack(spacing: 4) {
+                    Text("Bifogas: \(a.lastPathComponent)").font(.system(size: storlek - 3)).foregroundStyle(.secondary)
+                    Button { attachment = nil } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
         }
         .onChange(of: focused) { _, f in if f && thread.isQuestion { run.focusQuestion = thread.id } }
     }
 
-    private func send() {
-        run.chatSend(thread: thread, text: draft)
-        draft = ""
+    private func send(_ anchor: (point: Runner.PickPoint, kant: Int?, text: String)?) {
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachment != nil else { return }
+        run.chatSend(thread: thread, text: draft, attachment: attachment, anchor: anchor)
+        if anchor != nil { run.pekpunkter = [] }
+        draft = ""; attachment = nil
     }
 }
 
 struct ChattBubbla: View {
     @ObservedObject var run: Runner
     let entry: ChatEntry
-    let full: Bool
+    @AppStorage(ChattText.nyckel) private var storlek = ChattText.standard
 
     var body: some View {
         if entry.fromClaude {
-            HStack(alignment: .top, spacing: 5) {
+            HStack(alignment: .top, spacing: 6) {
                 Image(systemName: entry.isQuestion ? "questionmark.circle.fill" : "sparkles")
-                    .foregroundStyle(entry.isQuestion ? Color.orange : Color.purple).font(.caption)
-                Text(entry.text).font(.caption).lineLimit(full ? nil : 4).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    .foregroundStyle(entry.isQuestion ? Color.orange : Color.purple).font(.system(size: storlek - 1))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.text).font(.system(size: storlek)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    if !entry.tid.isEmpty { Text("Claude · " + chattTid(entry.tid)).font(.system(size: storlek - 3)).foregroundStyle(.tertiary) }
+                }
             }
-            .padding(6).frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 6).fill((entry.isQuestion ? Color.orange : Color.purple).opacity(0.12)))
-            .padding(.trailing, 14)
+            .padding(7).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 7).fill((entry.isQuestion ? Color.orange : Color.purple).opacity(0.11)))
+            .padding(.trailing, 12)
         } else if let a = entry.svar {
-            VStack(alignment: .trailing, spacing: 2) {
-                if !a.svar.isEmpty { Text(a.svar).font(.caption).lineLimit(full ? nil : 4).fixedSize(horizontal: false, vertical: true).textSelection(.enabled) }
+            VStack(alignment: .trailing, spacing: 3) {
+                if !a.svar.isEmpty { Text(a.svar).font(.system(size: storlek)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled) }
                 if let rel = a.ritning {
                     let shown = run.arVisad(rel)
                     Button { run.visaRitning(rel) } label: {
                         if let b = a.bilaga, let f = run.cadFolder, let img = NSImage(contentsOf: f.appendingPathComponent(b)) {
-                            Image(nsImage: img).resizable().aspectRatio(contentMode: .fit).frame(maxHeight: 90)
+                            Image(nsImage: img).resizable().aspectRatio(contentMode: .fit).frame(maxHeight: 110)
                                 .clipShape(RoundedRectangle(cornerRadius: 5))
                                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(shown ? Color.pink : Color.secondary.opacity(0.3), lineWidth: 1.5))
-                        } else { Label("Ritning", systemImage: "pencil.tip").font(.caption2) }
+                        } else { Label("Ritning", systemImage: "pencil.tip").font(.system(size: storlek - 2)) }
                     }.buttonStyle(.plain).tips("Tillbaka till vyn ritningen gjordes i, med strecken")
                     HStack(spacing: 8) {
                         Button { run.visaRitning(rel) } label: { Label("Visa i vyn", systemImage: "pencil.tip") }
                         if shown { Button { run.visadRitning = nil } label: { Label("Dölj", systemImage: "eye.slash") } }
-                    }.buttonStyle(.plain).font(.caption2).foregroundStyle(.pink)
-                } else if let b = a.bilaga { Label(b, systemImage: "paperclip").font(.caption2) }
+                    }.buttonStyle(.plain).font(.system(size: storlek - 2)).foregroundStyle(.pink)
+                } else if let b = a.bilaga { bilaga(b) }
                 if a.plats != nil || a.yta != nil || a.kant != nil {
-                    Label(Self.anchorText(a), systemImage: "mappin").font(.caption2).foregroundStyle(.orange)
+                    Label(Self.anchorText(a), systemImage: "mappin").font(.system(size: storlek - 2)).foregroundStyle(.orange)
                 }
-                Text(run.isRead(a) ? "✓✓ inarbetat" : (run.isReceived(a) ? "✓ mottaget" : "skickat"))
-                    .font(.caption2).foregroundStyle(run.isRead(a) ? Color.green : (run.isReceived(a) ? Color.blue : Color.secondary))
+                HStack(spacing: 4) {
+                    Text(chattTid(a.tid)).foregroundStyle(.tertiary)
+                    Text(run.isRead(a) ? "✓✓ inarbetat" : (run.isReceived(a) ? "✓ mottaget" : "skickat"))
+                        .foregroundStyle(run.isRead(a) ? Color.green : (run.isReceived(a) ? Color.blue : Color.secondary))
+                }.font(.system(size: storlek - 3))
             }
-            .padding(6).frame(maxWidth: .infinity, alignment: .trailing)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.14)))
-            .padding(.leading, 14)
+            .padding(7).frame(maxWidth: .infinity, alignment: .trailing)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color.accentColor.opacity(0.13)))
+            .padding(.leading, 12)
         }
+    }
+
+    /// Bilaga: bilder visas som miniatyr, andra filer som namn. Klick öppnar filen.
+    @ViewBuilder private func bilaga(_ rel: String) -> some View {
+        let url = run.cadFolder?.appendingPathComponent(rel)
+        Button { if let url { NSWorkspace.shared.open(url) } } label: {
+            if let url, let img = NSImage(contentsOf: url) {
+                Image(nsImage: img).resizable().aspectRatio(contentMode: .fit).frame(maxHeight: 110).clipShape(RoundedRectangle(cornerRadius: 5))
+            } else {
+                Label((rel as NSString).lastPathComponent, systemImage: "paperclip").font(.system(size: storlek - 2))
+            }
+        }.buttonStyle(.plain).tips("Öppna bilagan")
     }
 
     static func anchorText(_ a: Svar) -> String {
@@ -482,6 +623,7 @@ struct ChattSkrivfalt: View {
     @State private var attachment: URL?
     @State private var ignored: Traff?
     @FocusState private var focused: Bool
+    @AppStorage(ChattText.nyckel) private var storlek = ChattText.standard
 
     var body: some View {
         let anchor = (run.pick == nil && run.traff != nil && run.traff == ignored) ? nil : run.chatAnchor
@@ -503,7 +645,7 @@ struct ChattSkrivfalt: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.pink.opacity(0.10)))
             } else if let a = anchor {
                 HStack(spacing: 4) {
-                    Text("📍 " + a.text).font(.caption.monospacedDigit()).lineLimit(run.pekpunkter.count > 1 ? 4 : 1).truncationMode(.middle)
+                    Text("📍 " + a.text).font(.system(size: storlek - 2).monospacedDigit()).lineLimit(run.pekpunkter.count > 1 ? 4 : 1).truncationMode(.middle)
                     Button { dropAnchor() } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(.secondary).tips("Släpp förankringen")
                 }
@@ -512,7 +654,7 @@ struct ChattSkrivfalt: View {
             }
             HStack(spacing: 4) {
                 TextField(run.ritning == nil ? "Skriv till Claude – ny tråd …" : "Beskriv vad ritningen ska bli …", text: $draft, axis: .vertical)
-                    .lineLimit(1...5).textFieldStyle(.roundedBorder).focused($focused).onSubmit { send(anchor) }
+                    .lineLimit(1...6).textFieldStyle(.roundedBorder).font(.system(size: storlek)).focused($focused).onSubmit { send(anchor) }
                 Button { attachment = run.pickAttachment() } label: { Image(systemName: attachment == nil ? "paperclip" : "paperclip.circle.fill") }
                     .buttonStyle(.borderless).tips(attachment?.lastPathComponent ?? "Bifoga foto eller fil")
                 Button { send(anchor) } label: { Image(systemName: "paperplane.fill") }
