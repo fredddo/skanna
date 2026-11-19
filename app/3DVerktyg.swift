@@ -257,7 +257,7 @@ extension ModelView.Coordinator {
 
     func setSnapMarker(_ s: SnapPick?) {
         snapMarker.removeFromParentNode()
-        view?.toolTip = nil
+        if s == nil { view?.satTips(nil) }
         guard let s, let root = view?.scene?.rootNode else { return }
         let m = SCNMaterial(); m.diffuse.contents = NSColor.systemOrange; m.lightingModel = .constant; m.readsFromDepthBuffer = false
         let g = SCNSphere(radius: 1); g.materials = [m]
@@ -267,7 +267,7 @@ extension ModelView.Coordinator {
         setMarkMask(snapMarker)
         root.addChildNode(snapMarker)
         updateOverlayScale()
-        view?.toolTip = s.kind
+        view?.satTips(s.kind)
     }
 
     /// Hover: kant (Välj) eller fästpunkt (Mät) först, annars ytan under pekaren.
@@ -279,7 +279,7 @@ extension ModelView.Coordinator {
             ritHover(p)
             let hit = p.flatMap { v.hitTest($0, options: [.rootNode: partsRoot, .ignoreHiddenNodes: true, .categoryBitMask: 1]).first.flatMap { faceNode($0.node) } }
             if hit !== hovered { let old = hovered; hovered = hit; restyle(old); restyle(hit) }
-            if rit.fast == nil { v.toolTip = nil }
+            if rit.fast == nil { v.satTips(nil) }
             return
         }
         var edge: EdgeRef?
@@ -299,12 +299,12 @@ extension ModelView.Coordinator {
             restyle(old); restyle(hit)
         }
         if let s = snap {
-            v.toolTip = s.kind
+            v.satTips(s.kind)
         } else if let e = edge {
             let name = partNames[e.leaf.del] ?? e.leaf.del
-            v.toolTip = "\(name) · \(kantNamn(e.edge.id)) · \(e.edge.typ) \(mm(e.edge.langd, 2)) mm"
+            v.satTips("\(name) · \(kantNamn(e.edge.id)) · \(e.edge.typ) \(mm(e.edge.langd, 2)) mm")
         } else {
-            v.toolTip = hit.flatMap { faceKey($0) }.flatMap { k in split(k).map { "\(partNames[$0.0] ?? $0.0) · yta \($0.1) · \(faceInfo[k] ?? "")" } }
+            v.satTips(hit.flatMap { faceKey($0) }.flatMap { k in split(k).map { "\(partNames[$0.0] ?? $0.0) · yta \($0.1) · \(faceInfo[k] ?? "")" } })
         }
     }
 

@@ -59,7 +59,8 @@ final class Runner: ObservableObject {
     @Published var hidden: Set<String> = [] { didSet { if hidden != oldValue { noteChange("Visa/dölj"); saveObjektVisning() } } }
     @Published var objektOrdning: [String] = []          // användarens ordning i objektträdet (cad/objekt.json)
     @Published var egnaNamn: [String: String] = [:]      // användarens namn på delar (cad/objekt.json)
-    @Published var dolPaneler = false                    // alla paneler släckta (⇥); Esc tänder igen
+    static let panelerByts = Notification.Name("skanna.panelerByts")
+    @Published var dolPaneler = false { willSet { if newValue != dolPaneler { NotificationCenter.default.post(name: Runner.panelerByts, object: self) } } }                   // alla paneler släckta (⇥); Esc tänder igen
     @Published var claude: ClaudeInfo?
     @Published var focusQuestion: String?
     @Published var pick: PickPoint?

@@ -86,6 +86,38 @@ struct ModelView: NSViewRepresentable {
             target += -pov.simdWorldRight * Float(dx) * k + pov.simdWorldUp * Float(dy) * k
             applyCamera(animated: false)
         }
+        // Paneler släcks/tänds (⇥, Esc): 3D-vyn byter storlek och läge i fönstret. Flytta kameran i takt med det
+        // så att modellen ligger still på skärmen i stället för att panorera med vyns mitt.
+        private var panelRekt: NSRect?
+        private var panelTimer: Timer?
+        private var panelObs: NSObjectProtocol?
+        func foljPanelbyten() {
+            guard panelObs == nil else { return }
+            panelObs = NotificationCenter.default.addObserver(forName: Runner.panelerByts, object: nil, queue: .main) { [weak self] _ in
+                self?.panelerByts()
+            }
+        }
+        func panelerByts() {
+            guard let v = view, v.window != nil else { return }
+            panelRekt = v.convert(v.bounds, to: nil)
+            panelTimer?.invalidate()
+            var n = 0
+            panelTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] t in
+                n += 1
+                self?.kompenseraPanelbyte()
+                if n > 90 { t.invalidate() }
+            }
+        }
+        func kompenseraPanelbyte() {
+            guard let v = view, v.window != nil, let pov = v.pointOfView, let r0 = panelRekt, snapped == nil else { return }
+            let r1 = v.convert(v.bounds, to: nil)
+            guard r1 != r0 else { return }
+            panelRekt = r1
+            let dx = Float(r0.midX - r1.midX), dy = Float(r0.midY - r1.midY)
+            let k = dist * 2 * tan(Float(17 * Double.pi / 180)) / Float(max(v.bounds.height, 1))
+            target -= pov.simdWorldRight * dx * k + pov.simdWorldUp * dy * k
+            applyCamera(animated: false)
+        }
         func zoom(_ amount: CGFloat, at p: NSPoint? = nil) {
             if follow, snapped != nil { return }
             leavePhoto()
@@ -638,6 +670,7 @@ struct ModelView: NSViewRepresentable {
     func makeNSView(context: Context) -> SCNView {
         let v = HoverSCNView()
         v.onHover = { [weak coord = context.coordinator] p in coord?.hover(p) }
+        context.coordinator.foljPanelbyten()
         v.onDragStart = { [weak coord = context.coordinator] in coord?.dragStarted() }
         v.onDragEnd = { [weak coord = context.coordinator] in coord?.dragEnded() }
         v.onOrbit = { [weak coord = context.coordinator] dx, dy in coord?.orbit(dx, dy) }
@@ -1067,19 +1100,33 @@ final class HoverSCNView: SCNView {
         if let c = cursorProvider?() { addCursorRect(bounds, cursor: c) } else { super.resetCursorRects() }
     }
     override func cursorUpdate(with event: NSEvent) {
-        if let c = cursorProvider?() { c.set() } else { super.cursorUpdate(with: event) }
+        if let c = cursorProvider?(), arDirekt(event) { c.set() } else { super.cursorUpdate(with: event) }
     }
     func refreshCursor() {
         guard let w = window, bounds.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) else { return }
         (cursorProvider?() ?? NSCursor.arrow).set()
     }
+    /// Ligger pekaren direkt på 3D-vyn – inte på en knapp/panel ovanpå? (Spårningsytan täcker hela vyn, också under
+    /// SwiftUI-panelerna; utan den här kollen skrev hover över knapparnas tooltips och satte pennmarkören på dem.)
+    private var underPekaren = false
+    private func arDirekt(_ event: NSEvent) -> Bool {
+        guard let cv = window?.contentView else { return true }
+        let p = cv.superview.map { $0.convert(event.locationInWindow, from: nil) } ?? event.locationInWindow
+        return cv.hitTest(p) === self
+    }
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
+        guard arDirekt(event) else {
+            if underPekaren { underPekaren = false; onHover?(nil) }
+            return
+        }
+        underPekaren = true
         if let c = cursorProvider?() { c.set() }
         onHover?(convert(event.locationInWindow, from: nil))
     }
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
+        underPekaren = false
         onHover?(nil)
     }
 }
@@ -1133,4 +1180,9 @@ func worldBounds(_ root: SCNNode) -> (SIMD3<Float>, SIMD3<Float>) {
         } } }
     }
     return (lo, hi)
+}
+
+extension NSView {
+    /// Sätt tooltip bara när texten ändras – varje tilldelning startar om AppKits tooltip-hantering.
+    func satTips(_ s: String?) { if toolTip != s { toolTip = s } }
 }

@@ -232,7 +232,7 @@ extension ModelView.Coordinator {
         if rit.markor.parent !== root { root.addChildNode(rit.markor) }
         rit.markor.simdPosition = f.pick.local + offset(of: f.pick.leaf)
         updateOverlayScale()
-        view?.toolTip = f.pick.kind == "hörn" ? "hörn" : f.edge.map { "\(partNames[$0.leaf.del] ?? $0.leaf.del) · \(kantNamn($0.edge.id))" }
+        view?.satTips(f.pick.kind == "hörn" ? "hörn" : f.edge.map { "\(partNames[$0.leaf.del] ?? $0.leaf.del) · \(kantNamn($0.edge.id))" })
     }
 
     // MARK: Kamera och ritplan
@@ -296,7 +296,7 @@ extension ModelView.Coordinator {
         rit.pending = r
         ritSattFast(nil)
         if hovered != nil { let old = hovered; hovered = nil; restyle(old) }
-        view?.toolTip = nil
+        view?.satTips(nil)
         ritRitaLevande()
         return true
     }
