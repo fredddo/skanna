@@ -70,8 +70,11 @@ class Projekt:
     # ---- parametrar ----------------------------------------------------------------------------------------------
     def parametrar(self, grupp, spec):
         """Registrera gruppens mått och returnera {namn: värde} med användarens egna värden inlagda."""
+        import unicodedata
+        nfc = lambda t: unicodedata.normalize("NFC", t)   # macOS-filnamn (importerade delar) är NFD
+        grupp = nfc(grupp)
         self.grupp = grupp
-        overrides = self._read(self.cad / "parametrar-anvandare.json", {})
+        overrides = {nfc(k): v for k, v in self._read(self.cad / "parametrar-anvandare.json", {}).items()}
         out = {}
         for namn, s in spec.items():
             s = s if isinstance(s, tuple) else (s,)
@@ -79,7 +82,7 @@ class Projekt:
             enhet = s[1] if len(s) > 1 else "mm"
             kalla = s[2] if len(s) > 2 else "mall"
             osak = s[3] if len(s) > 3 else None
-            full = f"{grupp}: {namn}"
+            full = nfc(f"{grupp}: {namn}")
             if full in overrides:
                 varde, kalla = float(overrides[full]), "användare"
             out[namn] = varde

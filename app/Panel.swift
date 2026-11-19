@@ -145,6 +145,7 @@ struct ObjektPanel: View {
             Section("Ny del från mall") {
                 ForEach(run.mallar) { m in Button(m.namn) { run.addPart(from: m) }.help(m.beskrivning) }
             }
+            Button("Importera fil (STEP, STL, 3MF, OBJ) …  ⌥⌘I") { run.valjImport() }
             Divider()
             if !run.scripts.isEmpty {
                 Menu("Öppna del-skript") { ForEach(run.scripts, id: \.self) { u in Button(u.lastPathComponent) { run.openScript(u) } } }

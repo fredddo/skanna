@@ -34,6 +34,7 @@ struct SkannaApp: App {
                 Menu("Lägg till del från mall") {
                     ForEach(run.mallar) { m in Button(m.namn) { run.addPart(from: m) } }
                 }.disabled(run.output == nil)
+                Button("Importera del från fil …") { run.valjImport() }.keyboardShortcut("i", modifiers: [.command, .option]).disabled(run.output == nil)
                 Divider()
                 Button("Kopiera uppdrag till Claude") { run.copyClaudeText() }.keyboardShortcut("c", modifiers: [.command, .shift]).disabled(run.output == nil)
                 Button("Visa projektet i Finder") { run.revealProject() }.keyboardShortcut("r", modifiers: [.command, .shift]).disabled(run.output == nil)

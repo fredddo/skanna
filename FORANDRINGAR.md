@@ -6,6 +6,13 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Importera delar (19 nov):** *Lägg till del → Importera fil …* (objektträdets +, Projekt-menyn ⌥⌘I) eller dra in filen
+  på 3D-vyn. **STEP** från Fusion och andra CAD-program blir en del med riktiga ytor och kanter: välj, mät,
+  fasa/runda kanter, och Claude kan bygga vidare på den. **STL, 3MF och OBJ** blir trianglar. Stora plana partier går att
+  välja och mäta mot, och delen kan skrivas ut. Kryssa i *Som referens* för en köpt detalj som inte ska skrivas ut. Filen
+  kopieras till `cad/import/`, och placeringen ändras med måtten *flytta x/y/z, vrid x/y/z, skala* (25,4 för tum,
+  1000 för meter). Fusions egna parametrar följer inte med i STEP; be Claude skriva om delen som skript om du vill ha
+  redigerbara mått.
 - **Chatten (19 nov):** större och justerbar text (A−/A+), hela texten i varje meddelande, allt i en rullning.
   Klara trådar och Claudes lösa meddelanden hamnar i *Historik*, grupperad per dag och sökbar. Varje meddelande visar tid.
   Svar i en tråd kan ha bilaga och pekpunkter. "Claude arbetar" visas bara medan Claude faktiskt arbetar;

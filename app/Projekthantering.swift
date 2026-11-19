@@ -145,6 +145,110 @@ extension Runner {
         rebuild()
     }
 
+    // MARK: Importera delar från andra CAD-program (cad/importera.py)
+
+    static let importAndelser = ["step", "stp", "stl", "3mf", "obj"]
+    static func kanImportera(_ u: URL) -> Bool { importAndelser.contains(u.pathExtension.lowercased()) }
+
+    /// Välj STEP/STL/3MF/OBJ-filer och lägg in dem som delar.
+    func valjImport() {
+        guard output != nil else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = Runner.importAndelser.compactMap { UTType(filenameExtension: $0) }
+        panel.message = "Välj filer att importera som delar. STEP ger riktiga ytor och kanter; STL, 3MF och OBJ är trianglar."
+        panel.prompt = "Importera"
+        let ref = NSButton(checkboxWithTitle: "Som referens (visas och går att mäta mot, men skrivs inte ut)", target: nil, action: nil)
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 34))
+        ref.frame.origin = NSPoint(x: 12, y: 8)
+        ref.sizeToFit()
+        box.addSubview(ref)
+        panel.accessoryView = box
+        panel.isAccessoryViewDisclosed = true
+        guard panel.runModal() == .OK else { return }
+        importeraDelar(panel.urls, referens: ref.state == .on)
+    }
+
+    /// Kopiera filerna till cad/import/ och skriv ett del-skript per fil (cad/skript/50-import-<id>.py), bygg sedan.
+    @discardableResult
+    func importeraDelar(_ urls: [URL], referens: Bool = false) -> [String] {
+        let filer = urls.filter(Runner.kanImportera)
+        guard !filer.isEmpty, let cad = cadFolder, let dir = scriptFolder else {
+            if !urls.isEmpty { toast = "Bara STEP, STL, 3MF och OBJ går att importera" }
+            return []
+        }
+        let fm = FileManager.default
+        // äldre skanning som byggs med modell-cad.step: ett del-skript skulle ta över bygget
+        if scripts.isEmpty, fm.fileExists(atPath: cad.appendingPathComponent("modell-cad.step").path) {
+            toast = "Det här äldre projektet byggs på det gamla sättet (modell-cad.step) – be Claude flytta skripten till cad/skript/ först"
+            return []
+        }
+        let importDir = cad.appendingPathComponent("import", isDirectory: true)
+        do {
+            try fm.createDirectory(at: importDir, withIntermediateDirectories: true)
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch { toast = "Kunde inte skapa \(importDir.path): \(error.localizedDescription)"; return [] }
+        noteChange(filer.count == 1 ? "Importera \(filer[0].lastPathComponent)" : "Importera \(filer.count) filer", immediate: true)
+        var ids = Set(parts.map(\.id))
+        var klara: [String] = []
+        for src in filer {
+            let namn = src.deletingPathExtension().lastPathComponent.precomposedStringWithCanonicalMapping   // macOS-filnamn är NFD
+            let bas = "import-" + Runner.slug(namn)
+            var id = bas, n = 2
+            while ids.contains(id) || fm.fileExists(atPath: dir.appendingPathComponent("50-\(id).py").path) { id = "\(bas)-\(n)"; n += 1 }
+            ids.insert(id)
+            let ext = src.pathExtension.lowercased()
+            var fil = src.lastPathComponent.precomposedStringWithCanonicalMapping   // originalnamnet behålls
+            if !src.standardizedFileURL.path.hasPrefix(importDir.standardizedFileURL.path + "/") {
+                var k = 2
+                while fm.fileExists(atPath: importDir.appendingPathComponent(fil).path) { fil = "\(namn) \(k).\(src.pathExtension)"; k += 1 }
+                let dst = importDir.appendingPathComponent(fil)
+                do { try fm.copyItem(at: src, to: dst) } catch {
+                    toast = "Kunde inte kopiera \(src.lastPathComponent): \(error.localizedDescription)"; continue
+                }
+            }
+            let enc = JSONEncoder(); enc.outputFormatting = [.withoutEscapingSlashes]
+            func lit(_ s: String) -> String { String(decoding: (try? enc.encode(s)) ?? Data("\"\"".utf8), as: UTF8.self) }
+            let skript = """
+            # Importerad del: \(src.lastPathComponent) (\(ext == "step" || ext == "stp" ? "STEP, ytor och kanter" : "trianglar")), \
+            importerad \(isoNu()) av \(Hem.appNamn).
+            # Originalfilen ligger i cad/import/. Placeringen ändras med måtten "\(namn): flytta x" osv. i appen.
+            # Byt fil: ersätt filen i cad/import/ (samma namn) och bygg om. Se cad/importera.py i Skanna-hemmet.
+            import os, sys
+            sys.path.insert(0, os.path.join(os.environ.get("SKANNA_HEM", os.path.expanduser("~/git/worldforge/local/skanna-v2")), "cad"))
+            from projekt import Projekt
+            from importera import importera
+
+            prj = Projekt(sys.argv[1])
+            importera(prj, \(lit(id)), \(lit(namn)), \(lit("import/" + fil)), roll=\(lit(referens ? "referens" : "design")), farg="#8E8E93")
+
+            """
+            do { try skript.write(to: dir.appendingPathComponent("50-\(id).py"), atomically: true, encoding: .utf8) } catch {
+                toast = "Kunde inte skriva del-skriptet: \(error.localizedDescription)"; continue
+            }
+            klara.append(namn)
+        }
+        guard !klara.isEmpty else { return [] }
+        let hoppade = urls.count - filer.count
+        toast = (klara.count == 1 ? "\(klara[0]) importerad" : "\(klara.count) filer importerade") + " – bygger …"
+            + (hoppade > 0 ? " (\(hoppade) fil\(hoppade == 1 ? "" : "er") hoppades över: bara STEP, STL, 3MF och OBJ)" : "")
+        rebuild()
+        return klara
+    }
+
+    /// "Fäste v2 (å)" → "faste-v2-a"
+    static func slug(_ s: String) -> String {
+        let folded = s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "sv_SE")).lowercased()
+        var out = ""
+        for c in folded.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(c) && c.isASCII { out.unicodeScalars.append(c) }
+            else if !out.hasSuffix("-") { out += "-" }
+        }
+        let t = out.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return t.isEmpty ? "del" : String(t.prefix(40))
+    }
+
     func openScript(_ u: URL) { NSWorkspace.shared.open(u) }
 
     /// Nytt guidat skanningsprojekt: tom bildmapp + projekt.json, och sedan fotoläget.

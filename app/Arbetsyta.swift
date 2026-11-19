@@ -13,6 +13,7 @@ struct Workspace: View {
     @AppStorage("background") private var background = 0
     @AppStorage("hogerflik") private var rightTab = 0          // 0 samtal, 1 mått
     @AppStorage("visaObjektPanel") private var showTree = true
+    @State private var importMal = false
     @State private var upTick = 0
     @State private var keyMonitor: Any?
 
@@ -181,14 +182,30 @@ struct Workspace: View {
                     VStack(spacing: 10) {
                         Image(systemName: "square.stack.3d.up").font(.system(size: 40)).foregroundStyle(.tertiary)
                         Text("Tomt projekt").font(.headline).foregroundStyle(.secondary)
-                        Text("Lägg till en del från en mall, eller beskriv för Claude vad du vill bygga (Samtal till höger).")
-                            .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 320)
-                        Menu("Lägg till del från mall") {
-                            ForEach(run.mallar) { m in Button(m.namn) { run.addPart(from: m) } }
-                        }.fixedSize()
+                        Text("Lägg till en del från en mall, importera en fil (STEP, STL, 3MF, OBJ – dra in den hit), eller beskriv för Claude vad du vill bygga (Samtal till höger).")
+                            .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 340)
+                        HStack {
+                            Menu("Lägg till del från mall") {
+                                ForEach(run.mallar) { m in Button(m.namn) { run.addPart(from: m) } }
+                            }.fixedSize()
+                            Button("Importera fil …") { run.valjImport() }
+                        }
                     }
                 }
             }
+            .overlay {
+                if importMal {
+                    RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8, 5]))
+                        .overlay(Label("Släpp för att importera som del", systemImage: "square.and.arrow.down")
+                            .padding(10).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8)))
+                        .padding(6).allowsHitTesting(false)
+                }
+            }
+            .dropDestination(for: URL.self) { urls, _ in
+                let f = urls.filter(Runner.kanImportera)
+                guard !f.isEmpty, run.output != nil else { return false }
+                run.importeraDelar(f); return true
+            } isTargeted: { importMal = $0 }
     }
 
     // MARK: Snabbtangenter utan modifierare (bara när man inte skriver i ett textfält)

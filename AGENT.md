@@ -61,6 +61,17 @@ prj.spara(beskrivning="…", fragor=[{"id": "faste-hal", "text": "…", "markeri
 - Äldre skanningar utan `cad/skript/` men med `modell-cad.step` byggs med `cad/bygg_alla.sh` (HiKOKI-projektet).
   Flytta gärna sådana skript in i `cad/skript/` när du ändå arbetar med dem.
 
+### Importerade delar (`cad/import/`, `cad/skript/50-import-<id>.py`)
+Användaren kan importera STEP/STL/3MF/OBJ i appen. Filen kopieras till `cad/import/` och appen skriver ett del-skript
+som anropar `importera(prj, id, namn, "import/<fil>", roll=…)` ur `cad/importera.py`. Placeringen ligger som mått i
+gruppen `<namn>` (flytta x/y/z, vrid x/y/z, skala).
+- **STEP** blir en B-rep-del (ytor, kanter, kantbehandling). Bygg vidare i ett eget skript med
+  `from importera import las_step; s = las_step(prj, "import/<fil>")` (utan placering). Använd inte importdelens id.
+- **Mesh** (STL/3MF/OBJ) blir `ytor.json` med `"kalla": "mesh"`. Stora plana partier blir `plan`-ytor, och resten blir en
+  `nät`-yta per kropp. Den har inga kanter och ingen kantbehandling. Läs filen med trimesh om du behöver geometrin.
+- Ändra inte originalfilen. Vill användaren ha redigerbara mått: skriv en ny del som skript (mät STEP-delen) och fråga
+  om importdelen ska tas bort.
+
 ## geometri.json
 ```json
 {"status": "utkast | väntar på svar | klar",

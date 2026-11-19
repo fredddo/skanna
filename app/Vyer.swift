@@ -510,7 +510,7 @@ struct ShortcutsSheet: View {
             ("⌘,", "Inställningar: projektmapp och git")]),
         ("Ändra och spara", "arrow.uturn.backward", [
             ("⌘Z", "Ångra"), ("⇧⌘Z", "Gör om"), ("⌘Y", "Historik – gå tillbaka till en tidigare version"),
-            ("⌘B", "Bygg om delarna"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude")]),
+            ("⌘B", "Bygg om delarna"), ("⌥⌘I", "Importera del från fil (STEP, STL, 3MF, OBJ)"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude")]),
         ("Delar", "square.stack.3d.up", [
             ("E", "Dra isär alla delar / ihop igen"), ("R", "Lägg tillbaka allt som flyttats")]),
         ("Paneler", "rectangle.dashed", [
