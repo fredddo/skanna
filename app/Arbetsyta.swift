@@ -145,6 +145,13 @@ struct Workspace: View {
                 }
             }
             .padding(10)
+            if run.snapped == nil && run.output != nil && (run.model != nil || !run.parts.isEmpty) {
+                // sparade vyer: till vänster om vykuben (132 pt, 8 pt från hörnet), centrerat i höjd med den
+                VyRad(run: run)
+                    .padding(.top, 8 + (132 - VyRad.sida) / 2 - 4)
+                    .padding(.trailing, 8 + 132 + 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
             if run.snapped != nil {
                 Button { run.request("lämna-foto"); followPhotos = false } label: { Label("Lämna fotoläget", systemImage: "xmark.circle.fill") }
                     .keyboardShortcut(.escape, modifiers: [])

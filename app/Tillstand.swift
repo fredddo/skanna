@@ -96,6 +96,9 @@ final class Runner: ObservableObject {
     @Published var snittPlaceras = false { didSet { if snittPlaceras { aktivSnittvy = nil } } }  // nästa klick lägger snittplanet
     @Published var snittBegaran: SparadSnitt?            // 3D-vyn visar detta snitt (plan + kamera) och nollställer fältet
     @Published var snittvyer: [SparadSnitt] = []
+    @Published var vyer: [SparadVy] = []                 // sparade vyer (miniatyrerna vid vykuben)
+    @Published var vyBegaran: SparadVy?                  // 3D-vyn ställer in kameran för den här vyn och nollställer fältet
+    var vyBilder: URL? { cadFolder?.appendingPathComponent("vyer", isDirectory: true) }
     @Published var aktivSnittvy: String?                 // id för den sparade snittvy som är tänd (nil = inget eller ett osparat snitt)
     @Published var fargschema: Fargschema = .hav {
         didSet { if let o = output, oldValue != fargschema { UserDefaults.standard.set(fargschema.rawValue, forKey: "farg:" + o.path); noteChange("Färgschema") } }
@@ -182,7 +185,9 @@ final class Runner: ObservableObject {
         hidden = Set(ov.dolda); pick = nil; ritning = nil; visadRitning = nil; mellanslag = false; focusQuestion = nil; snapped = nil; note = nil; buildError = nil; buildLog = ""
         selectedPart = nil; sectionOn = false; sectionLabel = nil; sectionCoord = nil
         traff = nil; info = nil; matning = nil; explode = 0; offsets = [:]; underObjekt = [:]
-        snittPlaceras = false; snittBegaran = nil
+        snittPlaceras = false; snittBegaran = nil; vyBegaran = nil
+        vyer = cadFolder.flatMap { try? Data(contentsOf: $0.appendingPathComponent("vyer.json")) }
+            .flatMap { try? JSONDecoder().decode([SparadVy].self, from: $0) } ?? []
         snittvyer = cadFolder.flatMap { try? Data(contentsOf: $0.appendingPathComponent("snittvyer.json")) }
             .flatMap { try? JSONDecoder().decode([SparadSnitt].self, from: $0) } ?? []
         fargschema = output.flatMap { UserDefaults.standard.string(forKey: "farg:" + $0.path) }.flatMap(Fargschema.init(rawValue:))
@@ -319,6 +324,71 @@ final class Runner: ObservableObject {
         send(questionID: "meddelande", question: "Kantbehandling", text: "\(what) på \(namn), kant \(k.kant.map(String.init) ?? "?")",
              attachment: nil, plats: PickPoint(pos: k.mitt, target: namn, del: k.del), kant: k.kant)
         if !scripts.isEmpty { rebuild() }
+    }
+
+    // MARK: Sparade vyer
+
+    /// Anropas av 3D-vyn (begäran "spara-vy") med kameran, ev. snitt och en ögonblicksbild av canvasen.
+    func saveVy(kamera: [Double], mal: [Double], snitt: SparadSnitt?, bild: NSImage?) {
+        guard let f = cadFolder else { return }
+        let fmt = DateFormatter(); fmt.dateFormat = "yyyyMMdd-HHmmss"
+        var id = "vy-" + fmt.string(from: Date()), n = 2
+        while vyer.contains(where: { $0.id == id }) { id = "vy-\(fmt.string(from: Date()))-\(n)"; n += 1 }
+        let v = SparadVy(id: id, namn: "Vy \(vyer.count + 1)", tid: isoNu(), kamera: kamera, mal: mal, dolda: hidden.sorted(),
+                         flyttade: offsets.mapValues { [$0.x, $0.y, $0.z] }, explode: explode, opacitet: partOpacity,
+                         fargschema: fargschema.rawValue, snitt: snitt)
+        if let bild, let dir = vyBilder, let png = Runner.miniatyr(bild) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? png.write(to: dir.appendingPathComponent(id + ".png"), options: .atomic)
+        }
+        vyer.append(v)
+        writeVyer()
+        _ = f
+        toast = "\(v.namn) sparad – klicka på miniatyren för att komma tillbaka hit"
+    }
+
+    /// Kvadratisk miniatyr (mitten av bilden), 192 px, PNG.
+    static func miniatyr(_ img: NSImage) -> Data? {
+        guard let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let s = min(cg.width, cg.height)
+        guard s > 0, let crop = cg.cropping(to: CGRect(x: (cg.width - s) / 2, y: (cg.height - s) / 2, width: s, height: s)) else { return nil }
+        let side = 192
+        guard let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(crop, in: CGRect(x: 0, y: 0, width: side, height: side))
+        guard let out = ctx.makeImage() else { return nil }
+        return NSBitmapImageRep(cgImage: out).representation(using: .png, properties: [:])
+    }
+
+    func vyBild(_ v: SparadVy) -> NSImage? { vyBilder.flatMap { NSImage(contentsOf: $0.appendingPathComponent(v.id + ".png")) } }
+
+    /// Gå till en sparad vy: lager, flytt, explode, opacitet, färger och snitt här; kameran i 3D-vyn.
+    func showVy(_ v: SparadVy) {
+        noteChange("Visa \(v.namn)")
+        hidden = Set(v.dolda)
+        offsets = v.flyttade.compactMapValues { $0.count == 3 ? SIMD3($0[0], $0[1], $0[2]) : nil }
+        explode = v.explode
+        partOpacity = v.opacitet
+        if let o = output { UserDefaults.standard.set(partOpacity, forKey: "opacitet:" + o.path) }
+        if let fs = Fargschema(rawValue: v.fargschema) { fargschema = fs }
+        if let s = v.snitt { showSection(s) } else { sectionOn = false; snittPlaceras = false }
+        if snapped != nil { request("lämna-foto") }
+        vyBegaran = v
+    }
+    func deleteVy(_ id: String) {
+        vyer.removeAll { $0.id == id }
+        if let dir = vyBilder { try? FileManager.default.removeItem(at: dir.appendingPathComponent(id + ".png")) }
+        writeVyer()
+    }
+    func renameVy(_ id: String, _ namn: String) {
+        guard let i = vyer.firstIndex(where: { $0.id == id }), !namn.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        vyer[i].namn = namn; writeVyer()
+    }
+    private func writeVyer() {
+        guard let f = cadFolder else { return }
+        let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes, .sortedKeys]
+        if let d = try? enc.encode(vyer) { try? d.write(to: f.appendingPathComponent("vyer.json"), options: .atomic) }
     }
 
     /// Spara en snittvy (anropas av 3D-vyn med aktuellt plan och kamera när arbetsytan begär "spara-snitt").

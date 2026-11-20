@@ -563,19 +563,39 @@ extension ModelView.Coordinator {
 
     // MARK: Flytt och explode
 
-    func explodeVector(_ leaf: Leaf) -> V3 {
-        let d = leaf.center - asmCenter
+    func synlig(_ leaf: Leaf) -> Bool {
+        guard let h = run?.hidden else { return true }
+        return !h.contains(leaf.del) && !h.contains(leaf.id)
+    }
+
+    /// Explode gäller bara synliga objekt: de dras isär från sitt gemensamma mittpunkt, och avståndet står i proportion
+    /// till hur stora de synliga objekten är tillsammans (inte hela modellen/skanningen). Dolda objekt står kvar.
+    func explodeVector(_ leaf: Leaf, centrum: V3, storlek: Float) -> V3 {
+        guard synlig(leaf), storlek > 0 else { return .zero }
+        let d = leaf.center - centrum
         let l = simd_length(d)
         guard l > 1e-3 else { return .zero }
-        return d / l * Float(run?.explode ?? 0) * 0.9 * radius
+        // riktning från mitten; avståndet växer med hur långt ut objektet ligger (relativt), så att yttre delar går längre
+        let rel = min(1, l / storlek)
+        return d / l * Float(run?.explode ?? 0) * storlek * (0.4 + 0.5 * rel)
+    }
+
+    /// Mitt och "radie" för de synliga objekten.
+    func synligaMatt() -> (V3, Float) {
+        var lo = V3(repeating: .infinity), hi = V3(repeating: -.infinity)
+        for leaf in leaves.values where synlig(leaf) { lo = simd_min(lo, leaf.lo); hi = simd_max(hi, leaf.hi) }
+        guard lo.x.isFinite else { return (asmCenter, radius) }
+        return ((lo + hi) / 2, max(simd_length(hi - lo) / 2, 1))
     }
 
     func applyLayout(animated: Bool) {
         guard let run else { return }
-        let key = "\(run.explode)|" + run.offsets.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        let key = "\(run.explode)|\(run.explode > 0 ? run.hidden.sorted().joined(separator: ",") : "")|" + run.offsets.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
         guard key != layoutKey else { return }
         layoutKey = key
         func off(_ id: String) -> V3 { run.offsets[id].map(f3) ?? .zero }
+        let (centrum, storlek) = synligaMatt()
+        func explodeVector(_ leaf: Leaf) -> V3 { self.explodeVector(leaf, centrum: centrum, storlek: storlek) }
         SCNTransaction.begin()
         SCNTransaction.animationDuration = animated && !sectionOn && dragLeaf == nil ? 0.3 : 0
         for leaf in leaves.values {

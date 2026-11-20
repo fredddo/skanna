@@ -6,6 +6,10 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Sparade vyer (20 nov):** plusknappen till vänster om vykuben sparar hela viewporten – kamera, synliga lager,
+  flytt/explode, opacitet, färgschema och snitt – med en miniatyr av canvasen. Klicka en miniatyr för att gå tillbaka dit;
+  högerklick byter namn eller tar bort. Sparas i `cad/vyer.json` och `cad/vyer/`.
+- **Explode (E)** drar bara isär de delar som syns, och avståndet anpassas efter hur stora de synliga delarna är.
 - **Importera delar (19 nov):** *Lägg till del → Importera fil …* (objektträdets +, Projekt-menyn ⌥⌘I) eller dra in filen
   på 3D-vyn. **STEP** från Fusion och andra CAD-program blir en del med riktiga ytor och kanter: välj, mät,
   fasa/runda kanter, och Claude kan bygga vidare på den. **STL, 3MF och OBJ** blir trianglar. Stora plana partier går att

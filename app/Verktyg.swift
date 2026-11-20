@@ -99,6 +99,22 @@ struct Kantbehandling: Codable, Equatable {
     var tid: String
 }
 
+/// En sparad vy (cad/vyer.json + cad/vyer/<id>.png): hela viewporten som den var – kamera, vilka objekt som syns,
+/// flytt/explode, opacitet, färgschema och ev. snitt.
+struct SparadVy: Codable, Identifiable, Equatable {
+    var id: String                  // filnamnssäkert, t.ex. "vy-20261120-101530"
+    var namn: String
+    var tid: String
+    var kamera: [Double]            // 4×4 kolumnvis
+    var mal: [Double]               // orbit-målet
+    var dolda: [String]
+    var flyttade: [String: [Double]]
+    var explode: Double
+    var opacitet: [String: Double]
+    var fargschema: String
+    var snitt: SparadSnitt?
+}
+
 /// En sparad snittvy (cad/snittvyer.json): planet och kamerans läge, så att samma snitt kan visas igen.
 struct SparadSnitt: Codable, Identifiable, Equatable {
     var id: String                  // tid när den sparades

@@ -579,6 +579,18 @@ struct ModelView: NSViewRepresentable {
             }
         }
 
+        /// En sparad vy: kamera och mål (lager/snitt sätts av Runner).
+        func applyVy(_ s: SparadVy) {
+            if snapped != nil { unsnap() }
+            if s.mal.count == 3 { target = SIMD3(Float(s.mal[0]), Float(s.mal[1]), Float(s.mal[2])) }
+            guard s.kamera.count == 16, let pov = view?.pointOfView else { return }
+            let f = s.kamera.map { Float($0) }
+            SCNTransaction.begin(); SCNTransaction.animationDuration = 0.35
+            pov.simdTransform = simd_float4x4(columns: (SIMD4(f[0], f[1], f[2], f[3]), SIMD4(f[4], f[5], f[6], f[7]), SIMD4(f[8], f[9], f[10], f[11]), SIMD4(f[12], f[13], f[14], f[15])))
+            SCNTransaction.commit()
+            syncFromPov()
+        }
+
         func currentSaved() -> SparadSnitt? {
             guard sectionOn, let pov = view?.pointOfView else { return nil }
             let c = pov.simdTransform.columns
@@ -725,6 +737,10 @@ struct ModelView: NSViewRepresentable {
                 c.applySaved(s)
                 DispatchQueue.main.async { run?.snittBegaran = nil }
             }
+            if let vy = run?.vyBegaran {
+                c.applyVy(vy)
+                DispatchQueue.main.async { run?.vyBegaran = nil }
+            }
             c.setSection(section)
             if section, let sc = sectionCoord {
                 if c.lastSeenCoord != sc { c.lastSeenCoord = sc; c.moveSection(to: Float(sc)) }
@@ -747,6 +763,14 @@ struct ModelView: NSViewRepresentable {
             c.lastRequest = r.id
             if r.name == "spara-snitt" {
                 if let s = c.currentSaved() { run?.saveSection(s) }
+            } else if r.name == "spara-vy" {
+                if let pov = v.pointOfView {
+                    let m = pov.simdTransform.columns
+                    let cam = [m.0, m.1, m.2, m.3].flatMap { [Double($0.x), Double($0.y), Double($0.z), Double($0.w)] }
+                    let bild = v.snapshot()
+                    run?.saveVy(kamera: cam, mal: [Double(c.target.x), Double(c.target.y), Double(c.target.z)],
+                                snitt: c.currentSaved(), bild: bild)
+                }
             } else { DispatchQueue.main.async { c.goTo(r.name) } }
         }
         let effFace: String? = run?.traff != nil ? run?.traff.flatMap { t in t.yta.flatMap { y in t.del.map { "\($0):\(y)" } } } : selectedFace
