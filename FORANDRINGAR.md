@@ -6,6 +6,7 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- Sparade vyer fungerar även i fotoläget: vyn minns bildrutan, och en klick på miniatyren går tillbaka till samma foto (med lager och opacitet).
 - **Sparade vyer (20 nov):** plusknappen till vänster om vykuben sparar hela viewporten – kamera, synliga lager,
   flytt/explode, opacitet, färgschema och snitt – med en miniatyr av canvasen. Klicka en miniatyr för att gå tillbaka dit;
   högerklick byter namn eller tar bort. Sparas i `cad/vyer.json` och `cad/vyer/`.

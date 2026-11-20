@@ -36,7 +36,7 @@ struct VyRad: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .tips("Spara vyn: kamera, synliga lager, explode, snitt – med en miniatyr")
+            .tips("Spara vyn: kamera eller bildruta, synliga lager, explode, snitt – med en miniatyr")
         }
         .alert("Byt namn på vyn", isPresented: Binding(get: { dopas != nil }, set: { if !$0 { dopas = nil } })) {
             TextField("Namn", text: $nyttNamn)
@@ -64,7 +64,7 @@ struct VyRad: View {
         }
         .buttonStyle(.plain)
         .onAppear { if bilder[v.id] == nil, let img { bilder[v.id] = img } }
-        .tips("\(v.namn)\(v.snitt != nil ? " · med snitt" : "")\(v.dolda.isEmpty ? "" : " · \(v.dolda.count) dolda") – klicka för att gå hit (högerklick: byt namn, ta bort)")
+        .tips("\(v.namn)\(v.foto != nil ? " · fotoläge" : "")\(v.snitt != nil ? " · med snitt" : "")\(v.dolda.isEmpty ? "" : " · \(v.dolda.count) dolda") – klicka för att gå hit (högerklick: byt namn, ta bort)")
         .contextMenu {
             Button("Gå till \(v.namn)") { run.showVy(v) }
             Button("Byt namn …") { nyttNamn = v.namn; dopas = v }

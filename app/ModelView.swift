@@ -580,7 +580,15 @@ struct ModelView: NSViewRepresentable {
         }
 
         /// En sparad vy: kamera och mål (lager/snitt sätts av Runner).
+        var appliedVy: SparadVy?
         func applyVy(_ s: SparadVy) {
+            if let b = s.foto {
+                guard let f = photos.first(where: { $0.bild == b }) else { onNote?("Bildrutan i vyn finns inte längre"); return }
+                if s.mal.count == 3 { target = SIMD3(Float(s.mal[0]), Float(s.mal[1]), Float(s.mal[2])) }
+                if !follow { follow = true; onFollowChange?(true) }
+                snap(f, animated: snapped != nil); onNote?(nil)
+                return
+            }
             if snapped != nil { unsnap() }
             if s.mal.count == 3 { target = SIMD3(Float(s.mal[0]), Float(s.mal[1]), Float(s.mal[2])) }
             guard s.kamera.count == 16, let pov = view?.pointOfView else { return }
@@ -737,10 +745,6 @@ struct ModelView: NSViewRepresentable {
                 c.applySaved(s)
                 DispatchQueue.main.async { run?.snittBegaran = nil }
             }
-            if let vy = run?.vyBegaran {
-                c.applyVy(vy)
-                DispatchQueue.main.async { run?.vyBegaran = nil }
-            }
             c.setSection(section)
             if section, let sc = sectionCoord {
                 if c.lastSeenCoord != sc { c.lastSeenCoord = sc; c.moveSection(to: Float(sc)) }
@@ -757,6 +761,13 @@ struct ModelView: NSViewRepresentable {
             c.follow = followPhotos
             if followPhotos { DispatchQueue.main.async { c.enterPhotoMode() } } else { c.unsnap(); c.syncFromPov(); c.onNote?(nil) }
         }
+        // efter fotolägesväxeln ovan, annars slår den av fotoläget som en sparad fotovy just slog på
+        // en gång per begäran, och asynkront: fotoläget ändrar Runner-state som annars ritar om vyn mitt i uppdateringen
+        if run?.vyBegaran == nil { c.appliedVy = nil }
+        if v.scene != nil && !c.key.isEmpty, let vy = run?.vyBegaran, vy != c.appliedVy {
+            c.appliedVy = vy
+            DispatchQueue.main.async { c.applyVy(vy); run?.vyBegaran = nil }
+        }
         if c.opacity != overlayOpacity || c.cadStyle != cadStyle { c.opacity = overlayOpacity; c.cadStyle = cadStyle; c.restyleParts() }
         c.scanHiddenByUser = hidden.contains("skanning")
         if let r = viewRequest, r.id != c.lastRequest, v.scene != nil, !c.key.isEmpty {
@@ -769,7 +780,7 @@ struct ModelView: NSViewRepresentable {
                     let cam = [m.0, m.1, m.2, m.3].flatMap { [Double($0.x), Double($0.y), Double($0.z), Double($0.w)] }
                     let bild = v.snapshot()
                     run?.saveVy(kamera: cam, mal: [Double(c.target.x), Double(c.target.y), Double(c.target.z)],
-                                snitt: c.currentSaved(), bild: bild)
+                                snitt: c.snapped == nil ? c.currentSaved() : nil, foto: c.snapped?.bild, bild: bild)
                 }
             } else { DispatchQueue.main.async { c.goTo(r.name) } }
         }

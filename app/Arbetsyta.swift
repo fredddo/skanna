@@ -145,7 +145,7 @@ struct Workspace: View {
                 }
             }
             .padding(10)
-            if run.snapped == nil && run.output != nil && (run.model != nil || !run.parts.isEmpty) {
+            if run.output != nil && (run.model != nil || !run.parts.isEmpty) {
                 // sparade vyer: till vänster om vykuben (132 pt, 8 pt från hörnet), centrerat i höjd med den
                 VyRad(run: run)
                     .padding(.top, 8 + (132 - VyRad.sida) / 2 - 4)

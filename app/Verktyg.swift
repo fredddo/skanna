@@ -113,6 +113,7 @@ struct SparadVy: Codable, Identifiable, Equatable {
     var opacitet: [String: Double]
     var fargschema: String
     var snitt: SparadSnitt?
+    var foto: String? = nil         // bildrutan om vyn sparades i fotoläget
 }
 
 /// En sparad snittvy (cad/snittvyer.json): planet och kamerans läge, så att samma snitt kan visas igen.

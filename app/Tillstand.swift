@@ -329,14 +329,14 @@ final class Runner: ObservableObject {
     // MARK: Sparade vyer
 
     /// Anropas av 3D-vyn (begäran "spara-vy") med kameran, ev. snitt och en ögonblicksbild av canvasen.
-    func saveVy(kamera: [Double], mal: [Double], snitt: SparadSnitt?, bild: NSImage?) {
+    func saveVy(kamera: [Double], mal: [Double], snitt: SparadSnitt?, foto: String? = nil, bild: NSImage?) {
         guard let f = cadFolder else { return }
         let fmt = DateFormatter(); fmt.dateFormat = "yyyyMMdd-HHmmss"
         var id = "vy-" + fmt.string(from: Date()), n = 2
         while vyer.contains(where: { $0.id == id }) { id = "vy-\(fmt.string(from: Date()))-\(n)"; n += 1 }
         let v = SparadVy(id: id, namn: "Vy \(vyer.count + 1)", tid: isoNu(), kamera: kamera, mal: mal, dolda: hidden.sorted(),
                          flyttade: offsets.mapValues { [$0.x, $0.y, $0.z] }, explode: explode, opacitet: partOpacity,
-                         fargschema: fargschema.rawValue, snitt: snitt)
+                         fargschema: fargschema.rawValue, snitt: snitt, foto: foto)
         if let bild, let dir = vyBilder, let png = Runner.miniatyr(bild) {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try? png.write(to: dir.appendingPathComponent(id + ".png"), options: .atomic)
@@ -344,7 +344,7 @@ final class Runner: ObservableObject {
         vyer.append(v)
         writeVyer()
         _ = f
-        toast = "\(v.namn) sparad – klicka på miniatyren för att komma tillbaka hit"
+        toast = "\(v.namn) sparad\(foto != nil ? " (fotoläge)" : "") – klicka på miniatyren för att komma tillbaka hit"
     }
 
     /// Kvadratisk miniatyr (mitten av bilden), 192 px, PNG.
@@ -373,7 +373,7 @@ final class Runner: ObservableObject {
         if let o = output { UserDefaults.standard.set(partOpacity, forKey: "opacitet:" + o.path) }
         if let fs = Fargschema(rawValue: v.fargschema) { fargschema = fs }
         if let s = v.snitt { showSection(s) } else { sectionOn = false; snittPlaceras = false }
-        if snapped != nil { request("lämna-foto") }
+        if v.foto == nil && snapped != nil { request("lämna-foto") }
         vyBegaran = v
     }
     func deleteVy(_ id: String) {
