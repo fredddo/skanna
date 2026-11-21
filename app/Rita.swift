@@ -44,6 +44,7 @@ struct RitVisning: Codable, Equatable {
     var flyttade: [String: [Double]]   // tillfälligt flyttade delar/objekt (mm) – bilden visar dem flyttade
     var explode: Double
     var snitt: Bool
+    var sprangflyttade: [String: [Double]]? = nil   // egna flyttar i sprängvyn (mm vid explode 1)
 }
 
 struct Ritning: Codable, Equatable, Identifiable {
@@ -255,7 +256,8 @@ extension ModelView.Coordinator {
         let depth = max(simd_dot(planP - pov.simdWorldPosition, fram), 1)
         let fov = Double(pov.camera?.fieldOfView ?? 34)
         let mmPerPx = Double(depth) * 2 * tan(fov * .pi / 360) / Double(max(v.bounds.height, 1))
-        let vis = run.map { r in RitVisning(dolda: r.hidden.sorted(), flyttade: r.offsets.mapValues { [$0.x, $0.y, $0.z] }, explode: r.explode, snitt: sectionOn) }
+        let vis = run.map { r in RitVisning(dolda: r.hidden.sorted(), flyttade: r.offsets.mapValues { [$0.x, $0.y, $0.z] }, explode: r.explode, snitt: sectionOn,
+                                              sprangflyttade: r.sprangOffsets.isEmpty ? nil : r.sprangOffsets.mapValues { [$0.x, $0.y, $0.z] }) }
         return Ritning(id: isoNu(), tid: isoNu(), bild: nil, bild_skala: nil, vy: [Double(v.bounds.width), Double(v.bounds.height)],
                        kamera: cam, kamera_pos: dd(pov.simdWorldPosition), kamera_fram: dd(fram), kamera_upp: dd(pov.simdWorldUp),
                        kamera_hoger: dd(pov.simdWorldRight), fov: fov, mal: dd(target), plan_punkt: dd(planP), plan_normal: dd(-fram),

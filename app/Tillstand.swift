@@ -89,8 +89,11 @@ final class Runner: ObservableObject {
     @Published var traff: Traff?                         // vald del/yta/kant/punkt (verktyget Välj/Peka)
     @Published var info: Info?                           // mått på det valda (inspektören)
     @Published var matning: Matning?                     // verktyget Mät
-    @Published var explode: Double = 0 { didSet { if explode != oldValue { noteChange("Explode") } } }   // 0 = ihop, 1 = helt isärdraget
-    @Published var offsets: [String: SIMD3<Double>] = [:] { didSet { if offsets != oldValue { noteChange("Flytta") } } }  // tillfällig flytt per del-/objekt-id (mm)
+    @Published var explode: Double = 0 { didSet { if explode != oldValue { noteChange("Sprängvy") }; if explode == 0 { spelar = false } } }   // 0 = ihop, 1 = helt isärdraget
+    @Published var offsets: [String: SIMD3<Double>] = [:] { didSet { if offsets != oldValue { noteChange("Flytta") } } }
+    /// Flytt gjord i sprängvyn: läggs till isärdragningen och skalas med reglaget, så den följer med ihop ↔ isär.
+    @Published var sprangOffsets: [String: SIMD3<Double>] = [:] { didSet { if sprangOffsets != oldValue { noteChange("Flytta i sprängvyn") } } }
+    @Published var spelar = false                        // sprängvyn spelas upp (A): ihop ↔ isär i en loop  // tillfällig flytt per del-/objekt-id (mm)
     @Published var underObjekt: [String: [UnderObjekt]] = [:]  // sätts av 3D-vyn efter laddning
     // Snitt: klick placerar planet; sparade vyer i cad/snittvyer.json
     @Published var snittPlaceras = false { didSet { if snittPlaceras { aktivSnittvy = nil } } }  // nästa klick lägger snittplanet
@@ -184,7 +187,7 @@ final class Runner: ObservableObject {
         objektOrdning = ov.ordning; egnaNamn = ov.namn
         hidden = Set(ov.dolda); pick = nil; ritning = nil; visadRitning = nil; mellanslag = false; focusQuestion = nil; snapped = nil; note = nil; buildError = nil; buildLog = ""
         selectedPart = nil; sectionOn = false; sectionLabel = nil; sectionCoord = nil
-        traff = nil; info = nil; matning = nil; explode = 0; offsets = [:]; underObjekt = [:]
+        traff = nil; info = nil; matning = nil; explode = 0; offsets = [:]; sprangOffsets = [:]; spelar = false; underObjekt = [:]
         snittPlaceras = false; snittBegaran = nil; vyBegaran = nil
         vyer = cadFolder.flatMap { try? Data(contentsOf: $0.appendingPathComponent("vyer.json")) }
             .flatMap { try? JSONDecoder().decode([SparadVy].self, from: $0) } ?? []
@@ -336,7 +339,9 @@ final class Runner: ObservableObject {
         while vyer.contains(where: { $0.id == id }) { id = "vy-\(fmt.string(from: Date()))-\(n)"; n += 1 }
         let v = SparadVy(id: id, namn: "Vy \(vyer.count + 1)", tid: isoNu(), kamera: kamera, mal: mal, dolda: hidden.sorted(),
                          flyttade: offsets.mapValues { [$0.x, $0.y, $0.z] }, explode: explode, opacitet: partOpacity,
-                         fargschema: fargschema.rawValue, snitt: snitt, foto: foto)
+                         fargschema: fargschema.rawValue, snitt: snitt, foto: foto,
+                         sprangflyttade: sprangOffsets.isEmpty ? nil : sprangOffsets.mapValues { [$0.x, $0.y, $0.z] },
+                         spelar: spelar && explode > 0 ? true : nil)
         if let bild, let dir = vyBilder, let png = Runner.miniatyr(bild) {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try? png.write(to: dir.appendingPathComponent(id + ".png"), options: .atomic)
@@ -369,6 +374,8 @@ final class Runner: ObservableObject {
         hidden = Set(v.dolda)
         offsets = v.flyttade.compactMapValues { $0.count == 3 ? SIMD3($0[0], $0[1], $0[2]) : nil }
         explode = v.explode
+        sprangOffsets = (v.sprangflyttade ?? [:]).compactMapValues { $0.count == 3 ? SIMD3($0[0], $0[1], $0[2]) : nil }
+        spelar = v.spelar == true && v.explode > 0
         partOpacity = v.opacitet
         if let o = output { UserDefaults.standard.set(partOpacity, forKey: "opacitet:" + o.path) }
         if let fs = Fargschema(rawValue: v.fargschema) { fargschema = fs }
@@ -414,7 +421,7 @@ final class Runner: ObservableObject {
     }
 
     /// Nollställ tillfällig flytt och isärdragning.
-    func resetLayout() { offsets = [:]; explode = 0 }
+    func resetLayout() { offsets = [:]; sprangOffsets = [:]; explode = 0 }
 
     func toggle(_ id: String) { if hidden.contains(id) { hidden.remove(id) } else { hidden.insert(id) } }
 

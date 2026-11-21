@@ -570,14 +570,14 @@ extension ModelView.Coordinator {
 
     /// Explode gäller bara synliga objekt: de dras isär från sitt gemensamma mittpunkt, och avståndet står i proportion
     /// till hur stora de synliga objekten är tillsammans (inte hela modellen/skanningen). Dolda objekt står kvar.
-    func explodeVector(_ leaf: Leaf, centrum: V3, storlek: Float) -> V3 {
+    func explodeVector(_ leaf: Leaf, centrum: V3, storlek: Float, t: Float) -> V3 {
         guard synlig(leaf), storlek > 0 else { return .zero }
         let d = leaf.center - centrum
         let l = simd_length(d)
         guard l > 1e-3 else { return .zero }
         // riktning från mitten; avståndet växer med hur långt ut objektet ligger (relativt), så att yttre delar går längre
         let rel = min(1, l / storlek)
-        return d / l * Float(run?.explode ?? 0) * storlek * (0.4 + 0.5 * rel)
+        return d / l * t * storlek * (0.4 + 0.5 * rel)
     }
 
     /// Mitt och "radie" för de synliga objekten.
@@ -589,36 +589,73 @@ extension ModelView.Coordinator {
     }
 
     func applyLayout(animated: Bool) {
-        guard let run else { return }
-        let key = "\(run.explode)|\(run.explode > 0 ? run.hidden.sorted().joined(separator: ",") : "")|" + run.offsets.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        guard let run, spelTimer == nil else { return }   // uppspelningen placerar delarna själv
+        func txt(_ d: [String: SIMD3<Double>]) -> String { d.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",") }
+        let key = "\(run.explode)|\(run.explode > 0 ? run.hidden.sorted().joined(separator: ",") : "")|" + txt(run.offsets) + "|" + txt(run.sprangOffsets)
         guard key != layoutKey else { return }
         layoutKey = key
-        func off(_ id: String) -> V3 { run.offsets[id].map(f3) ?? .zero }
-        let (centrum, storlek) = synligaMatt()
-        func explodeVector(_ leaf: Leaf) -> V3 { self.explodeVector(leaf, centrum: centrum, storlek: storlek) }
-        SCNTransaction.begin()
-        SCNTransaction.animationDuration = animated && !sectionOn && dragLeaf == nil ? 0.3 : 0
-        for leaf in leaves.values {
-            if leaf.multi {
-                partNodes[leaf.del]?.simdPosition = off(leaf.del)
-                leaf.node.simdPosition = explodeVector(leaf) + off(leaf.id)
-            } else {
-                leaf.node.simdPosition = explodeVector(leaf) + off(leaf.del)
-            }
-        }
-        SCNTransaction.commit()
+        placeLeaves(t: Float(run.explode), duration: animated && !sectionOn && dragLeaf == nil ? 0.3 : 0)
         if sectionOn { rebuildSectionFill(force: true) }
         redrawMeasure(force: true)
         if animated { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.redrawMeasure(force: true) } }
     }
 
-    func resetLayout() { run?.offsets = [:]; run?.explode = 0; applyLayout(animated: true) }
+    /// Delarnas läge vid sprängvyns grad t (0 = ihop, 1 = helt isär): vanlig flytt + t · (automatisk riktning + egen sprängflytt).
+    func placeLeaves(t: Float, duration: Double) {
+        guard let run else { return }
+        func off(_ id: String) -> V3 { run.offsets[id].map(f3) ?? .zero }
+        func spr(_ id: String) -> V3 { run.sprangOffsets[id].map(f3) ?? .zero }
+        let (centrum, storlek) = synligaMatt()
+        SCNTransaction.begin()
+        SCNTransaction.animationDuration = duration
+        for leaf in leaves.values {
+            let e = explodeVector(leaf, centrum: centrum, storlek: storlek, t: t)
+            if leaf.multi {
+                partNodes[leaf.del]?.simdPosition = off(leaf.del) + t * spr(leaf.del)
+                leaf.node.simdPosition = e + off(leaf.id) + t * spr(leaf.id)
+            } else {
+                leaf.node.simdPosition = e + off(leaf.del) + t * spr(leaf.del)
+            }
+        }
+        SCNTransaction.commit()
+    }
+
+    // MARK: Uppspelning (A): ihop ↔ isär i en loop
+
+    func setSpelar(_ on: Bool) {
+        if on, spelTimer == nil {
+            spelStart = CACurrentMediaTime()
+            let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.spelSteg() }
+            RunLoop.main.add(t, forMode: .common)
+            spelTimer = t
+        } else if !on, let t = spelTimer {
+            t.invalidate(); spelTimer = nil
+            layoutKey = ""
+            applyLayout(animated: true)
+        }
+    }
+    func spelSteg() {
+        guard let run else { return }
+        let amp = Float(run.explode > 0 ? run.explode : 1)
+        let ga = 1.1, paus = 0.5, period = 2 * (ga + paus)
+        let ph = (CACurrentMediaTime() - spelStart).truncatingRemainder(dividingBy: period)
+        func ease(_ x: Double) -> Double { let c = min(1, max(0, x)); return c * c * (3 - 2 * c) }
+        // börjar isär (där sprängvyn står), går ihop, vilar, går isär igen
+        let u: Double = ph < paus ? 1 : ph < paus + ga ? 1 - ease((ph - paus) / ga) : ph < 2 * paus + ga ? 0 : ease((ph - 2 * paus - ga) / ga)
+        placeLeaves(t: amp * Float(u), duration: 0)
+    }
+
+    func resetLayout() { run?.offsets = [:]; run?.sprangOffsets = [:]; run?.explode = 0; applyLayout(animated: true) }
 
     func beginItemDrag(_ p: NSPoint, _ flags: NSEvent.ModifierFlags) -> Bool {
         guard tool == .flytta, snapped == nil else { return false }
         guard let h = visibleHits(p).first, let id = leafID(of: h.node), let leaf = leaves[id] else { return false }
         dragLeaf = leaf
         dragWhole = flags.contains(.option)
+        let nyckel = dragWhole ? leaf.del : leaf.id
+        dragTotal = .zero; dragAxis = nil
+        dragStart = ((run?.explode ?? 0) > 0 ? run?.sprangOffsets[nyckel] : run?.offsets[nyckel]).map(f3) ?? .zero
+        if run?.spelar == true { DispatchQueue.main.async { [weak self] in self?.run?.spelar = false } }
         setHoverEdge(nil)
         return true
     }
@@ -630,12 +667,43 @@ extension ModelView.Coordinator {
         let centerW = leaf.center + offset(of: leaf)
         let depth = max(simd_dot(centerW - cam, pov.simdWorldFront), 1)
         let k = depth * 2 * tan(Float(17 * Double.pi / 180)) / Float(max(v.bounds.height, 1))
-        let delta = pov.simdWorldRight * Float(dx) * k - pov.simdWorldUp * Float(dy) * k
-        run.offsets[id] = (run.offsets[id] ?? .zero) + d3(delta)
+        let t = Float(run.explode)
+        // i sprängvyn är flytten en egen sprängflytt som skalas med reglaget (t), så den följer med ihop/isär
+        dragTotal += (pov.simdWorldRight * Float(dx) * k - pov.simdWorldUp * Float(dy) * k) / (t > 0 ? max(t, 0.05) : 1)
+        var move = dragTotal
+        if shiftNere() {
+            // ⇧: rakt längs den axel (X/Y/Z) man drar mest åt; låst så länge ⇧ hålls
+            if dragAxis == nil, simd_length(dragTotal) * (t > 0 ? max(t, 0.05) : 1) > 6 * k {
+                let a = abs(dragTotal); dragAxis = a.x >= a.y && a.x >= a.z ? 0 : (a.y >= a.z ? 1 : 2)
+                onNote?("Låst längs \(["X", "Y", "Z"][dragAxis!]) – släpp ⇧ för fri flytt")
+            }
+            if let a = dragAxis { var m = V3.zero; m[a] = dragTotal[a]; move = m } else { move = .zero }
+        } else if dragAxis != nil { dragAxis = nil; onNote?(nil) }
+        if t > 0 { run.sprangOffsets[id] = d3(dragStart + move) } else { run.offsets[id] = d3(dragStart + move) }
+        visaAxel(dragAxis, genom: leaf.center + offset(of: leaf))
         applyLayout(animated: false)
     }
 
-    func endItemDrag() { dragLeaf = nil }
+    func endItemDrag() {
+        dragLeaf = nil
+        if dragAxis != nil { onNote?(nil) }
+        dragAxis = nil; visaAxel(nil, genom: .zero)
+    }
+
+    /// Hjälplinje längs den låsta axeln (röd X, grön Y, blå Z).
+    func visaAxel(_ a: Int?, genom p: V3) {
+        axelLinje.removeFromParentNode()
+        guard let a, let root = view?.scene?.rootNode else { return }
+        var d = V3.zero; d[a] = radius * 3
+        let src = SCNGeometrySource(vertices: [sv(p - d), sv(p + d)])
+        let g = SCNGeometry(sources: [src], elements: [SCNGeometryElement(indices: [Int32(0), 1], primitiveType: .line)])
+        let m = SCNMaterial(); m.lightingModel = .constant; m.readsFromDepthBuffer = false
+        m.diffuse.contents = [NSColor.systemRed, NSColor.systemGreen, NSColor.systemBlue][a]
+        g.materials = [m]
+        axelLinje = SCNNode(geometry: g); axelLinje.renderingOrder = 900
+        setMarkMask(axelLinje)
+        root.addChildNode(axelLinje)
+    }
 
     /// Dubbelklick på ett objekt i Flytta: tillbaka till sin plats. Returnerar om klicket togs om hand.
     func itemReset(_ p: NSPoint) -> Bool {
@@ -643,6 +711,8 @@ extension ModelView.Coordinator {
         guard let h = visibleHits(p).first, let id = leafID(of: h.node), let leaf = leaves[id] else { return false }
         run.offsets[leaf.id] = nil
         run.offsets[leaf.del] = nil
+        run.sprangOffsets[leaf.id] = nil
+        run.sprangOffsets[leaf.del] = nil
         applyLayout(animated: true)
         return true
     }

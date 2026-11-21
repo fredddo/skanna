@@ -6,6 +6,13 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Sprängvy (21 nov):** E heter nu Sprängvy och har ny ikon. Flyttar du delar (G) medan sprängvyn är på blir det sprängflyttar:
+  de följer med reglaget och går ihop när sprängvyn slås av. **▶ / A** spelar upp ihop ↔ isär i en loop; Esc, A eller E
+  stoppar. Sparar du en vy medan den spelar får miniatyren en ▶ och spelar upp när du klickar på den.
+- **⇧ när du flyttar (G):** delen går rakt längs X, Y eller Z (den riktning du drar mest åt), med en färgad hjälplinje, så
+  länge du håller ⇧.
+- `./bygg-beta.sh --test` bygger och startar en separat testinstans (`test/Skanna Beta Test.app`) på kopior i
+  `~/Downloads/skanna-test/kopia`, så att Skanna Beta du jobbar i inte byts ut.
 - Sparade vyer fungerar även i fotoläget: vyn minns bildrutan, och ett klick på miniatyren går tillbaka till samma foto (med lager och opacitet).
 - **Sparade vyer (20 nov):** plusknappen till vänster om vykuben sparar hela viewporten – kamera, synliga lager,
   flytt/explode, opacitet, färgschema och snitt – med en miniatyr av canvasen. Klicka en miniatyr för att gå tillbaka dit;

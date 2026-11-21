@@ -19,7 +19,7 @@ enum Verktyg: String, CaseIterable, Identifiable {
         case .valj: return "Klicka på en del, yta eller kant för att se dess mått (V)"
         case .mat: return "Klicka två punkter, ytor eller kanter för att mäta avståndet (M)"
         case .rita: return "Rita i vyn som på en utskrift och beskriv för Claude – starten fäster mot kanter. ⇧ = rak linje, mellanslag + dra = vrid (D)"
-        case .flytta: return "Dra en del för att flytta den tillfälligt – modellen ändras inte (G)"
+        case .flytta: return "Dra en del för att flytta den tillfälligt – modellen ändras inte (G). Håll ⇧ för att dra rakt längs X, Y eller Z; i sprängvyn blir flytten en del av isärdragningen"
         case .peka: return "Klicka där något ska ändras och beskriv det för Claude (P)"
         }
     }
@@ -114,6 +114,8 @@ struct SparadVy: Codable, Identifiable, Equatable {
     var fargschema: String
     var snitt: SparadSnitt?
     var foto: String? = nil         // bildrutan om vyn sparades i fotoläget
+    var sprangflyttade: [String: [Double]]? = nil   // egna flyttar i sprängvyn (skalas med explode)
+    var spelar: Bool? = nil         // sprängvyn spelades upp (ihop ↔ isär) när vyn sparades
 }
 
 /// En sparad snittvy (cad/snittvyer.json): planet och kamerans läge, så att samma snitt kan visas igen.

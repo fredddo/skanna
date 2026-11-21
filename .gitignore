@@ -7,3 +7,5 @@ __pycache__/
 # första versionen (v1) hör inte hit
 /gammal/
 .DS_Store
+# testinstansen (bygg-beta.sh --test)
+/test/

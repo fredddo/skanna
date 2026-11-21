@@ -494,7 +494,7 @@ struct ShortcutsSheet: View {
     private let vanster: [Grupp] = [
         ("Verktyg", "cursorarrow", [
             ("V", "Välj – mått på det du klickar"), ("M", "Mät mellan två punkter"),
-            ("P", "Peka – A, B, C … till nästa chattmeddelande"), ("D", "Rita i vyn"), ("G", "Flytta del tillfälligt"),
+            ("P", "Peka – A, B, C … till nästa chattmeddelande"), ("D", "Rita i vyn"), ("G", "Flytta del tillfälligt (⇧: rakt längs X/Y/Z)"),
             ("Esc", "Avmarkera / rensa mätning och pekpunkter")]),
         ("Rita", "pencil.tip", [
             ("D, dra", "Rita – starten fäster mot kanter"), ("⇧", "Rak linje"), ("Mellanslag + dra", "Vrid vyn medan du ritar"),
@@ -512,7 +512,7 @@ struct ShortcutsSheet: View {
             ("⌘Z", "Ångra"), ("⇧⌘Z", "Gör om"), ("⌘Y", "Historik – gå tillbaka till en tidigare version"),
             ("⌘B", "Bygg om delarna"), ("⌥⌘I", "Importera del från fil (STEP, STL, 3MF, OBJ)"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude")]),
         ("Delar", "square.stack.3d.up", [
-            ("E", "Dra isär alla delar / ihop igen"), ("R", "Lägg tillbaka allt som flyttats")]),
+            ("E", "Sprängvy: dra isär synliga delar / ihop igen"), ("A", "Spela upp sprängvyn (ihop ↔ isär) / stoppa"), ("R", "Lägg tillbaka allt som flyttats")]),
         ("Paneler", "rectangle.dashed", [
             ("⇥", "Släck alla paneler"), ("Esc", "Tänd panelerna igen"), ("O", "Objektträdet"), ("⇧⌘F", "Projektlistan")]),
         ("Skanning", "camera", [

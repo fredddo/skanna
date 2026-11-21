@@ -490,6 +490,11 @@ struct ModelView: NSViewRepresentable {
         var hoverEdgeKey = "", selEdgeKey = "", matKey = "", layoutKey = ""
         var dragLeaf: Leaf?
         var dragWhole = false
+        var dragStart = V3.zero, dragTotal = V3.zero, dragAxis: Int?
+        var axelLinje = SCNNode()
+        var shiftNere: () -> Bool = { NSEvent.modifierFlags.contains(.shift) }
+        var spelTimer: Timer?
+        var spelStart: CFTimeInterval = 0
         var knownSelectedPart: String?
         var handledTraff: Traff?
         var selectedLeaf: String?
@@ -762,6 +767,7 @@ struct ModelView: NSViewRepresentable {
             if followPhotos { DispatchQueue.main.async { c.enterPhotoMode() } } else { c.unsnap(); c.syncFromPov(); c.onNote?(nil) }
         }
         // efter fotolägesväxeln ovan, annars slår den av fotoläget som en sparad fotovy just slog på
+        c.setSpelar((run?.spelar ?? false) && c.snapped == nil)
         // en gång per begäran, och asynkront: fotoläget ändrar Runner-state som annars ritar om vyn mitt i uppdateringen
         if run?.vyBegaran == nil { c.appliedVy = nil }
         if v.scene != nil && !c.key.isEmpty, let vy = run?.vyBegaran, vy != c.appliedVy {

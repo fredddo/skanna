@@ -10,6 +10,7 @@ struct Ogonblick: Equatable {
     var skript: [String: Data]            // cad/skript/*.py
     var hidden: Set<String>
     var offsets: [String: SIMD3<Double>]
+    var sprangOffsets: [String: SIMD3<Double>] = [:]
     var explode: Double
     var partOpacity: [String: Double]
     var fargschema: Fargschema
@@ -36,7 +37,7 @@ extension Runner {
         }
         return Ogonblick(overrides: overrides,
                          kant: cadFolder.flatMap { try? Data(contentsOf: $0.appendingPathComponent("kantbehandling.json")) },
-                         skript: skript, hidden: hidden, offsets: offsets, explode: explode, partOpacity: partOpacity,
+                         skript: skript, hidden: hidden, offsets: offsets, sprangOffsets: sprangOffsets, explode: explode, partOpacity: partOpacity,
                          fargschema: fargschema, sectionOn: sectionOn, ritning: ritning,
                          utskrift: utskriftURL.flatMap { try? Data(contentsOf: $0) })
     }
@@ -91,6 +92,7 @@ extension Runner {
         defer { undoPaused = false; undoStable = captureState(); undoBurst = nil }
         hidden = b.hidden
         offsets = b.offsets
+        sprangOffsets = b.sprangOffsets
         explode = b.explode
         partOpacity = b.partOpacity
         if let o = output { UserDefaults.standard.set(partOpacity, forKey: "opacitet:" + o.path) }

@@ -243,12 +243,15 @@ struct Workspace: View {
             case "d": run.tool = .rita
             case "g": run.tool = .flytta
             case "p": run.tool = .peka
-            case "e": withAnimation { run.explode = run.explode > 0 ? 0 : 1 }
+            case "e": if run.spelar { run.spelar = false } else { withAnimation { run.explode = run.explode > 0 ? 0 : 1 } }
+            case "a":
+                if run.spelar { run.spelar = false } else if run.snapped == nil { if run.explode == 0 { run.explode = 1 }; run.spelar = true }
             case "x": run.sectionOn.toggle(); run.snittPlaceras = run.sectionOn
             case "r": run.resetLayout()
             case "o": withAnimation { showTree.toggle() }
             default:
                 if e.keyCode == 53 {   // Esc: rensa val och mätning (fotoläget har egen Esc-knapp)
+                    if run.spelar { run.spelar = false; return nil }
                     if run.tool == .rita, run.ritning != nil { run.kastaRitning(); return nil }
                     if run.tool == .peka, !run.pekpunkter.isEmpty { run.pekpunkter = []; run.traff = nil; run.info = nil; return nil }
                     if run.snapped != nil { return e }
@@ -289,14 +292,20 @@ struct ToolBar: View {
                 .tips("\(t.namn): \(t.hjalp)")
             }
             sep
-            Button { withAnimation(.easeInOut(duration: 0.3)) { run.explode = run.explode > 0 ? 0 : 1 } } label: {
-                Image(systemName: run.explode > 0 ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+            Button { run.spelar = false; withAnimation(.easeInOut(duration: 0.3)) { run.explode = run.explode > 0 ? 0 : 1 } } label: {
+                Image(systemName: run.explode > 0 ? "square.3.layers.3d" : "square.3.layers.3d.down.right")
+                    .foregroundStyle(run.explode > 0 ? Color.accentColor : Color.primary)
             }
-            .buttonStyle(.borderless).tips("Dra isär alla delar (E) – bara visning")
+            .buttonStyle(.borderless)
+            .tips(run.explode > 0 ? "Sprängvy på (E) – klicka för ihop. Flytta (G) i sprängvyn placerar delarna isär; det följer med reglaget och sparade vyer"
+                                  : "Sprängvy (E): dra isär de synliga delarna – bara visning")
             if run.explode > 0 {
                 Slider(value: $run.explode, in: 0...1).frame(width: 80).tips("Hur långt isär")
+                Button { run.spelar.toggle() } label: { Image(systemName: run.spelar ? "stop.fill" : "play.fill") }
+                    .buttonStyle(.borderless).disabled(run.snapped != nil)
+                    .tips(run.spelar ? "Stoppa (A, Esc)" : "Spela upp (A): ihop ↔ isär i en loop tills du stoppar")
             }
-            if !run.offsets.isEmpty || run.explode > 0 {
+            if !run.offsets.isEmpty || !run.sprangOffsets.isEmpty || run.explode > 0 {
                 Button { withAnimation { run.resetLayout() } } label: { Image(systemName: "arrow.down.forward.and.arrow.up.backward") }
                     .buttonStyle(.borderless).tips("Lägg tillbaka allt (R)")
             }
