@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Bambu Studio-projekt-3MF för Bambu Lab X2D (0,4 mm) av ett Skanna-projekts konstruktionsdelar.
 
-    cad/bambu.py <projekt> [--delar id,id] [--material PLA] [--ut fil.3mf]
+    cad/bambu.py <projekt> [--delar id,id] [--material PLA] [--ut fil.3mf] [--stl-mapp <mapp> --namn-tillagg " – snitt"]
     cad/bambu.py --bygg-mall [--material PETG-CF]      # bygg om bambu/x2d-<plast>-project_settings.json
 
-Skriver sökvägen till 3MF-filen på sista raden. Utan --ut: <projekt>/cad/<projektnamn>-bambu.3mf.
+--stl-mapp: ta delarnas STL ur den mappen (<id>.stl, utskriftsläge) i stället för cad/ – t.ex. snittet från
+cad/snitt_utskrift.py; bara delar som har en fil där tas med. Skriver sökvägen till 3MF-filen på sista raden. Utan --ut: <projekt>/cad/<projektnamn>-bambu.3mf.
 Delarna = rader i cad/delar.json med roll "design" och "export" (utskriftsfilen <id>.stl, redan i utskriftsläge:
 lägsta z = 0). De radpackas på platta 1, 2, 3 … (10 mm mellanrum, centrerat per platta, 256 × 256 mm).
 
@@ -272,7 +273,7 @@ def plattorigo(index, antal):
     return (index % kol) * 1.2 * PLATTA, -(index // kol) * 1.2 * PLATTA
 
 
-def bygg_3mf(projekt, delar_ids, material, ut):
+def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
     import numpy as np
     import trimesh
     prj = Path(projekt).expanduser().resolve()
@@ -290,6 +291,8 @@ def bygg_3mf(projekt, delar_ids, material, ut):
     delar.sort(key=lambda d: ordning.get(d["id"], len(ordning)))
     val = [d for d in delar if d.get("roll") == "design" and d.get("export")
            and (not delar_ids or d["id"] in delar_ids)]
+    if stl_mapp:
+        val = [d for d in val if (Path(stl_mapp) / f"{d['id']}.stl").exists()]
     if not val:
         raise SystemExit("inga konstruktionsdelar med utskriftsfil att exportera (kör Bygg om först?)")
     from utskrift import gallande, las
@@ -309,7 +312,7 @@ def bygg_3mf(projekt, delar_ids, material, ut):
 
     meshar = []
     for d in val:
-        f = cad / (Path(d["export"]).stem + ".stl")
+        f = Path(stl_mapp) / f"{d['id']}.stl" if stl_mapp else cad / (Path(d["export"]).stem + ".stl")
         m = trimesh.load(str(f), force="mesh")
         v = np.asarray(m.vertices, dtype=float)
         lo, hi = v.min(axis=0), v.max(axis=0)
@@ -326,7 +329,7 @@ def bygg_3mf(projekt, delar_ids, material, ut):
     for i, ((d, m, lo, hi), (pl, px, py), (plast, s), fp) in enumerate(zip(meshar, pos, inst_per_del, plats), start=1):
         ox, oy = plattorigo(pl, nplattor)
         mid, wid = 2 * i - 1, 2 * i
-        namn = f'{d.get("namn") or d["id"]} ({plast})'          # plasten i namnet, så att delarna inte blandas ihop
+        namn = f'{d.get("namn") or d["id"]}{namn_tillagg} ({plast})'          # plasten i namnet, så att delarna inte blandas ihop
         c = (lo + hi) / 2
         v = np.asarray(m.vertices) - c                    # meshen centrerad kring origo, som i Bambus egna filer
         fil = f"3D/Objects/object_{wid}.model"
@@ -411,6 +414,8 @@ def main():
     ap.add_argument("--material", default=STANDARDPLAST, help="plast för delar utan egen (PLA, PETG, PETG-CF …)")
     ap.add_argument("--ut")
     ap.add_argument("--bygg-mall", action="store_true")
+    ap.add_argument("--stl-mapp")
+    ap.add_argument("--namn-tillagg", default="")
     a = ap.parse_args()
     if a.bygg_mall:
         print(bygg_mall(a.material))
@@ -420,7 +425,7 @@ def main():
     prj = Path(a.projekt).expanduser().resolve()
     ut = Path(a.ut) if a.ut else prj / "cad" / f"{prj.name}-bambu.3mf"
     ids = {s.strip() for s in a.delar.split(",") if s.strip()}
-    ut = bygg_3mf(prj, ids, a.material, ut)
+    ut = bygg_3mf(prj, ids, a.material, ut, stl_mapp=a.stl_mapp, namn_tillagg=a.namn_tillagg)
     print(ut)
     return 0
 

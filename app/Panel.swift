@@ -24,8 +24,11 @@ struct ObjektPanel: View {
             .padding(.bottom, 4)
             ScrollIfNeeded(rows: run.parts.count + run.underObjekt.values.reduce(0) { $0 + $1.count } / 2 + (run.model != nil ? 1 : 0), limit: 12) {
                 VStack(alignment: .leading, spacing: 1) {
-                    let refs = run.parts.filter { $0.roll != "design" }
-                    let designs = run.parts.filter { $0.roll == "design" }
+                    // delar med "foralder" visas under föräldern (inte på egen rad på toppnivå)
+                    let ids = Set(run.parts.map(\.id))
+                    let topp = run.parts.filter { $0.foralder.map { !ids.contains($0) } ?? true }
+                    let refs = topp.filter { $0.roll != "design" }
+                    let designs = topp.filter { $0.roll == "design" }
                     if run.model != nil {
                         // skanningen överst, och allt som kommer ur skanningen (referensdelar) under den
                         HStack(spacing: 2) {
@@ -45,11 +48,11 @@ struct ObjektPanel: View {
                                 .menuStyle(.borderlessButton).frame(width: 26).tips("Hur skanningen ritas")
                             }
                         }
-                        if scanOpen { ForEach(refs) { partRow($0, indent: 14) } }
+                        if scanOpen { ForEach(refs) { partTree($0, indent: 14) } }
                     }
                     if !run.parts.isEmpty || run.model != nil { snittGroup }
-                    if !refs.isEmpty && run.model == nil { header("Referens"); ForEach(refs) { partRow($0) } }
-                    if !designs.isEmpty { header("Konstruktion"); ForEach(designs) { partRow($0) } }
+                    if !refs.isEmpty && run.model == nil { header("Referens"); ForEach(refs) { partTree($0) } }
+                    if !designs.isEmpty { header("Konstruktion"); ForEach(designs) { partTree($0) } }
                     if run.parts.isEmpty && run.model == nil {
                         Text("Inga delar än. Lägg till en från en mall (+) eller beskriv för Claude vad du vill bygga.")
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
@@ -160,8 +163,17 @@ struct ObjektPanel: View {
         for (_, subs) in run.underObjekt { all.formUnion(subs.map(\.id)) }
         let base = id.split(separator: "#").first.map(String.init) ?? id
         all.remove(id); all.remove(base)
+        for c in run.parts where c.foralder == base { all.remove(c.id); for s in run.underObjekt[c.id] ?? [] { all.remove(s.id) } }
         if id == base { for s in run.underObjekt[base] ?? [] { all.remove(s.id) } }
         run.hidden = all
+    }
+
+    /// En del och dess barn (delar med "foralder" = delen), indragna under den. Ett barn har eget öga.
+    @ViewBuilder private func partTree(_ p: PartInfo, indent: CGFloat = 0) -> some View {
+        partRow(p, indent: indent)
+        ForEach(run.parts.filter { $0.foralder == p.id && $0.id != p.id }) { c in
+            partRow(c, indent: indent + 14)
+        }
     }
 
     @ViewBuilder private func partRow(_ p: PartInfo, indent: CGFloat = 0) -> some View {

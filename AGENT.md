@@ -15,7 +15,9 @@ Ett projekt är en mapp. Två slags projekt, samma struktur:
   modell/modell-mm.obj    (skanning) mesh i mm, X = längsta, Z = kortaste axeln, centrerad på omslutande låda
   cad/
     skript/NN-<id>.py     del-skript (build123d) – körs i namnordning av bygg_projekt.sh
-    delar.json            delarna i objektträdet (skrivs av skripten)
+    delar.json            delarna i objektträdet (skrivs av skripten). "foralder": "<id>" visar delen under en annan
+                          (eget öga); ett barn som skrivs ut ihop med föräldern har "export": null, och
+                          <förälder>-enhet.step (om den finns) är den hopsmälta utskriftsenheten
     <id>-ytor.json        varje dels ytor (appens 3D-vy, val av yta)
     <id>.step / .3mf / .stl   CAD resp. utskriftsfiler (3mf i utskriftsläge: z ≥ 0, platt sida ner)
     geometri.json         status, beskrivning, mått (parametrar) och frågor
@@ -68,6 +70,9 @@ prj.spara(beskrivning="…", fragor=[{"id": "faste-hal", "text": "…", "markeri
   i en tillfällig mapp och jämför ytorna) → `cad/visningar/kanslighet.json`. Det visas som orange färg på allt som ändras
   när användaren håller musen på ett handtag eller ett mått i listan. Du behöver inte göra något för det, men skriv
   skript där mått som hör ihop verkligen räknas ur varandra (då syns relationen).
+- **Skriv ut med snitt på:** appen skär de synliga delarna vid snittplanet (`cad/snitt_utskrift.py`: kamerans sida bort,
+  snittytan nedåt mot plattan; källa `<id>-enhet.step`, annars `<id>.step` + barnens, annars ytfilen) och gör
+  Bambu-projektet av dem (`bambu.py --stl-mapp`). Menyn Skriv ut har kvar "Hela delarna".
 - `prj.spara` skriver bara den egna gruppens mått och frågor (fältet `grupp`) – flera skript samsas om `geometri.json`.
 - Äldre skanningar med `modell-cad.step` byggs först med `bygg_alla.sh` (HiKOKI-projektet), därefter körs ev. del-skript i
   `cad/skript/` (t.ex. en mall eller import som användaren lagt till).

@@ -6,6 +6,11 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Delar under delar:** en del med `"foralder"` i delar.json (t.ex. cellbädden) visas indragen under föräldern
+  (distansringen) med eget öga. "Visa bara den här" på föräldern tar med barnen.
+- **Skriv ut snittet:** när snittet är på skriver Skriv ut (⌘E) bara det som syns – de synliga delarna avskurna vid
+  planet, kamerans sida bort, snittytan nedåt mot plattan. "Hela delarna" finns kvar i menyn. ⌘E gör nu alltid
+  Bambu-projektet (tidigare öppnades 3MF-filerna var för sig).
 - **Måtthandtag (21 nov):** välj en del (Välj) så får dess ändringsbara mått ett handtag – blått med måttlinje där
   skriptet märkt måttet (`prj.mattlinje`, finns i mallarna låda/distans/vinkelfäste), lila pil annars (där delen ändras
   mest). Dra handtaget längs måttet (0,5 mm-steg, ⇧ hela mm) – delen byggs om när du släpper – eller klicka och skriv ett

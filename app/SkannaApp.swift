@@ -30,7 +30,7 @@ struct SkannaApp: App {
                 Button("Historik …") { run.visaHistorik = true }.keyboardShortcut("y").disabled(run.output == nil)
                 Button("Flytta projektet …") { if let o = run.output { run.valjOchFlytta(o) } }.disabled(run.output == nil)
                 Button("Bygg om delarna") { run.rebuild() }.keyboardShortcut("b").disabled(!run.canEdit)
-                Button("Skriv ut i Bambu Studio") { run.exportAll() }.keyboardShortcut("e").disabled(run.parts.isEmpty)
+                Button("Skriv ut i Bambu Studio") { run.exportBambuProject() }.keyboardShortcut("e").disabled(run.parts.isEmpty)
                 Menu("Lägg till del från mall") {
                     ForEach(run.mallar) { m in Button(m.namn) { run.addPart(from: m) } }
                 }.disabled(run.output == nil)

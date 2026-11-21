@@ -464,6 +464,8 @@ final class Runner: ObservableObject {
     func openInSlicer(_ files: [URL]) {
         let existing = files.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !existing.isEmpty else { toast = "Utskriftsfilen saknas – bygg om delen (⌘B)"; return }
+        // tester (offscreen) öppnar aldrig Bambu Studio
+        if ProcessInfo.processInfo.environment["SKANNA_ALDRIG_SLICER"] != nil { print("skulle öppna:", existing.map(\.path)); return }
         let candidates = ["/Applications/BambuStudio.app", "/Applications/Bambu Studio.app", NSHomeDirectory() + "/Applications/BambuStudio.app"]
         if let bambu = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) {
             NSWorkspace.shared.open(existing, withApplicationAt: URL(fileURLWithPath: bambu), configuration: NSWorkspace.OpenConfiguration())

@@ -804,6 +804,8 @@ struct ModelView: NSViewRepresentable {
             c.lastRequest = r.id
             if r.name == "spara-snitt" {
                 if let s = c.currentSaved() { run?.saveSection(s) }
+            } else if r.name == "skriv-ut-snitt" {
+                if let s = c.currentSaved() { DispatchQueue.main.async { run?.skrivUtSnitt(s) } } else { DispatchQueue.main.async { run?.exportBambuProject(heladelar: true) } }
             } else if r.name == "spara-vy" {
                 if let pov = v.pointOfView {
                     let m = pov.simdTransform.columns

@@ -162,6 +162,8 @@ struct PartInfo: Decodable, Identifiable, Hashable {
     let export: String?
     let beskrivning: String?
     var bambu: BambuDict? = nil   // del-skriptets Bambu-inställningar (prj.del_(…, bambu={…})); cad/utskrift.json går före
+    var foralder: String? = nil   // delen visas under den här delen i objektträdet (t.ex. cellbädden under distansringen,
+                                  // som skrivs ut ihop med den: barnet har då ingen egen export)
 }
 struct PartsFile: Decodable { let delar: [PartInfo] }
 

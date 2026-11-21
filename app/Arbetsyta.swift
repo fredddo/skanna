@@ -68,12 +68,19 @@ struct Workspace: View {
             Button { run.rebuild() } label: { Label("Bygg om", systemImage: "hammer") }
                 .disabled(!run.canEdit || run.rebuilding).tips("Kör del-skripten igen (⌘B)")
             Menu {
-                Button("Bambu Studio-projekt (alla synliga delar, inställningar satta)") { run.exportBambuProject() }
+                if run.sectionOn && run.snapped == nil {
+                    Button("Bara snittet (det som syns, avskuret vid planet)") { run.exportBambuProject() }
+                    Button("Hela delarna (utan snitt)") { run.exportBambuProject(heladelar: true) }
+                } else {
+                    Button("Bambu Studio-projekt (alla synliga delar, inställningar satta)") { run.exportBambuProject() }
+                }
                 Button("Öppna delarnas 3MF-filer var för sig") { run.exportAll() }
             } label: { Label("Skriv ut", systemImage: "printer") } primaryAction: { run.exportBambuProject() }
                 .fixedSize()
                 .disabled(!run.parts.contains { $0.export != nil })
-                .tips("Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
+                .tips(run.sectionOn && run.snapped == nil
+                      ? "Skriv ut snittet: de synliga delarna avskurna där snittet går, snittytan mot plattan (⌘E). Menyn: hela delarna"
+                      : "Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
             Button { run.openFolder() } label: { Image(systemName: "folder") }.tips("Öppna projektmappen i Finder (visa i Finder: ⇧⌘R)")
             Menu {
                 Picker("Bakgrund", selection: $background) { Text("Vit").tag(0); Text("Grå").tag(1); Text("Mörk").tag(2) }
@@ -655,17 +662,69 @@ extension Runner {
 
     /// cad/bambu.py → projekt-3MF (X2D, inställningar per del ur cad/utskrift.json, plasten i objektnamnet) med synliga
     /// konstruktionsdelar, öppnas i Bambu Studio.
-    func exportBambuProject() {
+    /// Konstruktionsdelar med utskriftsfil som syns – eller vars barn syns (barnet skrivs ut ihop med föräldern).
+    var synligaUtskriftsdelar: [String] {
+        parts.filter { p in
+            p.roll == "design" && p.export != nil
+                && (!hidden.contains(p.id) || parts.contains { $0.foralder == p.id && !hidden.contains($0.id) })
+        }.map(\.id)
+    }
+
+    /// Skriv ut (⌘E): ett Bambu Studio-projekt av de synliga delarna. Är snittet på blir det bara snittet (3D-vyn ger
+    /// planet via begäran "skriv-ut-snitt" → skrivUtSnitt), om inte heladelar.
+    func exportBambuProject(heladelar: Bool = false) {
+        if sectionOn && snapped == nil && !heladelar { request("skriv-ut-snitt"); return }
+        korBambu(extra: [], tillagg: nil)
+    }
+
+    /// Snittet som syns: cad/snitt_utskrift.py skär de synliga delarna vid planet (kamerans sida bort, snittytan nedåt),
+    /// sedan bambu.py med de avskurna filerna.
+    func skrivUtSnitt(_ s: SparadSnitt) {
+        guard let project = output, let cad = cadFolder else { return }
+        let ids = synligaUtskriftsdelar
+        guard !ids.isEmpty else { toast = "Inga synliga konstruktionsdelar att skriva ut"; return }
+        toast = "Skär delarna vid \(s.namn) …"
+        let mapp = cad.appendingPathComponent("visningar/snitt")   // mellanfiler: visningar/ hålls utanför git
+        let p = Process()
+        p.executableURL = Hem.url.appendingPathComponent(".venv/bin/python")
+        p.arguments = [Hem.url.appendingPathComponent("cad/snitt_utskrift.py").path, project.path,
+                       "--axel", String(s.axel), "--lage", String(s.lage), "--tecken", String(s.tecken),
+                       "--delar", ids.joined(separator: ","), "--ut", mapp.path]
+        var env = ProcessInfo.processInfo.environment
+        env["SKANNA_HEM"] = Hem.url.path
+        p.environment = env
+        let pipe = Pipe()
+        p.standardOutput = pipe; p.standardError = pipe
+        p.terminationHandler = { [weak self] proc in
+            let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if proc.terminationStatus == 0 {
+                    let namn = s.namn.replacingOccurrences(of: ",", with: "_").filter { $0.isLetter || $0.isNumber || "-_".contains($0) }
+                    self.korBambu(extra: ["--stl-mapp", mapp.path, "--namn-tillagg", " – \(s.namn)",
+                                          "--ut", cad.appendingPathComponent("\(project.lastPathComponent)-\(namn)-bambu.3mf").path],
+                                  tillagg: s.namn)
+                } else {
+                    self.buildLog = out
+                    let last = out.split(separator: "\n").last.map(String.init) ?? ""
+                    self.buildError = "Snittet gick inte att skära: " + last
+                }
+            }
+        }
+        do { try p.run() } catch { toast = "Kunde inte starta snittet: \(error.localizedDescription)" }
+    }
+
+    private func korBambu(extra: [String], tillagg: String?) {
         guard let project = output else { return }
         flushUtskrift()
         let script = Hem.url.appendingPathComponent("cad/bambu.py")
         guard FileManager.default.fileExists(atPath: script.path) else { exportAll(); return }
-        let ids = parts.filter { $0.roll == "design" && $0.export != nil && !hidden.contains($0.id) }.map(\.id)
+        let ids = synligaUtskriftsdelar
         guard !ids.isEmpty else { toast = "Inga synliga konstruktionsdelar att skriva ut"; return }
-        toast = "Gör Bambu Studio-projekt …"
+        toast = tillagg.map { "Gör Bambu Studio-projekt av \($0) …" } ?? "Gör Bambu Studio-projekt …"
         let p = Process()
         p.executableURL = Hem.url.appendingPathComponent(".venv/bin/python")
-        p.arguments = [script.path, project.path, "--delar", ids.joined(separator: ",")]
+        p.arguments = [script.path, project.path, "--delar", ids.joined(separator: ",")] + extra
         var env = ProcessInfo.processInfo.environment
         env["SKANNA_HEM"] = Hem.url.path
         p.environment = env
