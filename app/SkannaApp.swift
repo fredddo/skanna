@@ -20,7 +20,7 @@ struct SkannaApp: App {
                 Button("Guidad skanning …") { run.screen = .guidad }.keyboardShortcut("n", modifiers: [.command, .option])
                 Button("Importera foton …") { run.importPhotos() }.keyboardShortcut("i", modifiers: [.command, .shift])
                 Divider()
-                Button("Öppna mapp …") { run.openOther() }.keyboardShortcut("o")
+                Button("Öppna projekt …") { run.openOther() }.keyboardShortcut("o")
             }
             CommandGroup(replacing: .undoRedo) {
                 Button(run.undoName.map { "Ångra \($0)" } ?? "Ångra") { run.undoCommand(redo: false) }.keyboardShortcut("z")

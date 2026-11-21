@@ -64,7 +64,7 @@ struct Sidebar: View {
                     Button("Guidad skanning (stativ + vridskiva) …  ⌥⌘N") { run.screen = .guidad }
                     Button("Importera foton …") { run.importPhotos() }
                     Divider()
-                    Button("Öppna mapp …  ⌘O") { run.openOther() }
+                    Button("Öppna projekt …  ⌘O") { run.openOther() }
                 } label: { Label("Nytt", systemImage: "plus") }
                 .menuStyle(.borderlessButton).fixedSize()
                 .tips("Nytt projekt eller ny skanning")
@@ -87,6 +87,18 @@ struct Sidebar: View {
                 Section("Senaste") {
                     ForEach(run.scans) { s in row(s) }
                 }
+                // modellprojekt utan skanning: ett klick ger ett nytt projekt med delen (alla mått går att ändra)
+                if !run.mallar.isEmpty {
+                    Section("Ny från mall") {
+                        ForEach(run.mallar) { m in
+                            Button { run.createModelProject(name: m.namn, template: m, message: "") } label: {
+                                Label(m.namn, systemImage: "plus.square.on.square").foregroundStyle(.purple).padding(.vertical, 1)
+                            }
+                            .buttonStyle(.plain)
+                            .tips("Nytt modellprojekt: \(m.beskrivning)\nHamnar i \(Hem.projektRot.path)")
+                        }
+                    }
+                }
             }
             .overlay {
                 if run.scans.isEmpty {
@@ -99,6 +111,8 @@ struct Sidebar: View {
             }
             HStack {
                 Button { run.screen = .valkommen } label: { Image(systemName: "questionmark.circle") }.tips("Start och guide")
+                Button { run.openOther() } label: { Image(systemName: "folder") }
+                    .tips("Öppna ett projekt (⌘O): vilken projektmapp som helst – skanning (*.modell) eller modellprojekt (mapp med projekt.json eller cad/skript)")
                 Spacer()
                 Button { run.refreshScans() } label: { Image(systemName: "arrow.clockwise") }.tips("Uppdatera listan")
             }
@@ -506,7 +520,7 @@ struct ShortcutsSheet: View {
     ]
     private let hoger: [Grupp] = [
         ("Projekt", "folder", [
-            ("⌘N", "Nytt modellprojekt"), ("⌘O", "Öppna mapp"), ("⇧⌘R", "Visa projektet i Finder"),
+            ("⌘N", "Nytt modellprojekt"), ("⌘O", "Öppna projekt"), ("⇧⌘R", "Visa projektet i Finder"),
             ("⌘,", "Inställningar: projektmapp och git")]),
         ("Ändra och spara", "arrow.uturn.backward", [
             ("⌘Z", "Ångra"), ("⇧⌘Z", "Gör om"), ("⌘Y", "Historik – gå tillbaka till en tidigare version"),

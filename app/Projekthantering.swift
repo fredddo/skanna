@@ -23,7 +23,8 @@ extension Runner {
             }
         }
         for u in (try? fm.contentsOfDirectory(at: Hem.projektRot, includingPropertiesForKeys: nil)) ?? []
-        where fm.fileExists(atPath: u.appendingPathComponent("projekt.json").path) || u.lastPathComponent.contains(".modell") {
+        where fm.fileExists(atPath: u.appendingPathComponent("projekt.json").path) || u.lastPathComponent.contains(".modell")
+            || fm.fileExists(atPath: u.appendingPathComponent("cad/skript").path) {
             found.insert(u.standardizedFileURL)
         }
         for p in extraFolders where fm.fileExists(atPath: p) { found.insert(URL(fileURLWithPath: p).standardizedFileURL) }
@@ -73,7 +74,7 @@ extension Runner {
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowedContentTypes = [UTType(filenameExtension: "obj")!, .usdz, .folder]
-        panel.message = "Välj en projektmapp (*.modell eller en mapp med projekt.json) eller en modellfil (.obj/.usdz)"
+        panel.message = "Välj en projektmapp – skanning (*.modell) eller modellprojekt (mapp med projekt.json eller cad/skript) – eller en modellfil (.obj/.usdz)"
         guard panel.runModal() == .OK, let u = panel.url else { return }
         var dir: ObjCBool = false
         FileManager.default.fileExists(atPath: u.path, isDirectory: &dir)

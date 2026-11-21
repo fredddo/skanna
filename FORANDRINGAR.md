@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Modellprojekt syns:** projektlistan har nu en del "Ny från mall" (Låda med lock, Vridskiva, Distans, Vinkelfäste) –
+  ett klick ger ett nytt modellprojekt i projektmappen. Mappknappen längst ner (och ⌘O, "Öppna projekt …") öppnar vilken
+  projektmapp som helst; mappar med `cad/skript` räknas som projekt även utan projekt.json.
 - **Delar under delar:** en del med `"foralder"` i delar.json (t.ex. cellbädden) visas indragen under föräldern
   (distansringen) med eget öga. "Visa bara den här" på föräldern tar med barnen.
 - **Skriv ut snittet:** när snittet är på skriver Skriv ut (⌘E) bara det som syns – de synliga delarna avskurna vid
