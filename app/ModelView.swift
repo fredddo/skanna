@@ -449,7 +449,7 @@ struct ModelView: NSViewRepresentable {
         }
         func restyle(_ n: SCNNode?) {
             guard let n, let k = faceKey(n), split(k) != nil else { return }
-            n.geometry?.materials = [k == selectedFace ? selMat : (n === hovered ? hoverMat : (leafID(of: n).flatMap { leaves[$0]?.mat } ?? SCNMaterial()))]
+            n.geometry?.materials = [k == selectedFace ? selMat : (n === hovered ? hoverMat : (relYtor.contains(k) ? relMat : (leafID(of: n).flatMap { leaves[$0]?.mat } ?? SCNMaterial())))]
         }
         // --- val av del och opacitet
         var partOpacity: [String: Double] = [:]
@@ -492,6 +492,19 @@ struct ModelView: NSViewRepresentable {
         var dragWhole = false
         var dragStart = V3.zero, dragTotal = V3.zero, dragAxis: Int?
         var axelLinje = SCNNode()
+        // måtthandtag (Matthandtag.swift)
+        var handtag: [Handtag] = []
+        var handtagNode = SCNNode()
+        var handtagScaled: [(SCNNode, Float)] = []
+        var handtagEtiketter: [(Int, V3, SIMD2<Float>, SIMD2<Float>, SCNNode?)] = []   // (index, världsläge, etikettens förskjutning px, storlek px, etikettnod)
+        var handtagKey = ""
+        var handtagDrag: HandtagDrag?
+        var hoverHandtag: Int?
+        var hoverNamn: String?
+        var vantandeVarden: [String: Double] = [:]
+        var relYtor = Set<String>()
+        var relParamVisad: String?
+        let relMat: SCNMaterial = { let m = SCNMaterial(); m.diffuse.contents = NSColor.systemOrange; m.lightingModel = .blinn; m.isDoubleSided = true; return m }()
         var shiftNere: () -> Bool = { NSEvent.modifierFlags.contains(.shift) }
         var spelTimer: Timer?
         var spelStart: CFTimeInterval = 0
@@ -674,6 +687,8 @@ struct ModelView: NSViewRepresentable {
         /// Ett klick i vyn (också anropbart direkt, t.ex. från tester): placerar snitt eller kör aktivt verktyg.
         func click(at p: NSPoint) {
             guard view != nil, let run else { return }
+            if tool == .valj, handtagVid(p) != nil { return }   // handtaget sköts av mus ned/upp (Matthandtag.swift)
+            if run.mattInmatning != nil { run.mattInmatning = nil }
             let hits = visibleHits(p)
             // Snitt som placeras: klicket lägger planet och gör inget annat
             if run.snittPlaceras {
@@ -703,9 +718,16 @@ struct ModelView: NSViewRepresentable {
         v.onPan = { [weak coord = context.coordinator] dx, dy in coord?.pan(dx, dy) }
         v.onZoom = { [weak coord = context.coordinator] a, p in coord?.zoom(a, at: p) }
         v.onFit = { [weak coord = context.coordinator] in coord?.fitView() }
-        v.onCapture = { [weak coord = context.coordinator] p, f in coord?.beginItemDrag(p, f) ?? false }
-        v.onItemDrag = { [weak coord = context.coordinator] dx, dy in coord?.itemDrag(dx, dy) }
-        v.onItemDragEnd = { [weak coord = context.coordinator] in coord?.endItemDrag() }
+        v.onCapture = { [weak coord = context.coordinator] p, f in
+            guard let coord else { return false }
+            return coord.beginHandtagDrag(p) || coord.beginItemDrag(p, f)
+        }
+        v.onItemDrag = { [weak coord = context.coordinator] dx, dy in
+            if coord?.handtagDrag != nil { coord?.dragHandtag(dx, dy) } else { coord?.itemDrag(dx, dy) }
+        }
+        v.onItemDragEnd = { [weak coord = context.coordinator] in
+            if coord?.handtagDrag != nil { coord?.endHandtagDrag() } else { coord?.endItemDrag() }
+        }
         v.onDoubleClick = { [weak coord = context.coordinator] p in coord?.itemReset(p) ?? false }
         v.onDrawBegin = { [weak coord = context.coordinator] p, f in coord?.ritBorja(p, f) ?? false }
         v.onDrawMove = { [weak coord = context.coordinator] p, f in coord?.ritDra(p, f) }
@@ -766,6 +788,8 @@ struct ModelView: NSViewRepresentable {
             c.follow = followPhotos
             if followPhotos { DispatchQueue.main.async { c.enterPhotoMode() } } else { c.unsnap(); c.syncFromPov(); c.onNote?(nil) }
         }
+        if c.relParamVisad != run?.relParam { c.relParamVisad = run?.relParam; c.visaRelation() }
+        if v.scene != nil && !c.key.isEmpty { c.ritaHandtag() }
         // efter fotolägesväxeln ovan, annars slår den av fotoläget som en sparad fotovy just slog på
         c.setSpelar((run?.spelar ?? false) && c.snapped == nil)
         // en gång per begäran, och asynkront: fotoläget ändrar Runner-state som annars ritar om vyn mitt i uppdateringen

@@ -28,4 +28,7 @@ with BuildPart() as b:
         chamfer(b.edges().filter_by(Axis.Z, reverse=True), min(f, (D - d) / 4 - 0.05, h / 3))
 prj.del_("distans", "Distans", b.part, farg="#2E7DD7", beskrivning=f"⌀{D:g}/⌀{d:g} × {h:g} mm",
          bambu={"wall_loops": 4, "sparse_infill_density": "50%", "enable_support": 0})
+prj.mattlinje("ytterdiameter", (-D / 2, 0, h), (D / 2, 0, h), "distans", faktor=2)
+prj.mattlinje("hål diameter", (0, -d / 2, h), (0, d / 2, h), "distans", faktor=2)
+prj.mattlinje("höjd", (0, -D / 2, 0), (0, -D / 2, h), "distans")
 prj.spara(beskrivning="Distans från mall.")

@@ -69,9 +69,36 @@ struct CadInfo: Decodable {
     let status: String?           // "utkast" | "väntar på svar" | "klar"
     let beskrivning: String?
     let parametrar: [Param]?
+    let mattlinjer: [Mattlinje]?
     let fragor: [Fraga]?
     let avvikelse: String?
     let last_svar: String?
+}
+
+/// Var ett mått sitter (prj.mattlinje i del-skriptet): handtaget i till-änden ändrar måttet med längdändring × faktor.
+struct Mattlinje: Decodable, Hashable {
+    let namn: String
+    let fran: [Double]
+    let till: [Double]
+    let del: String?
+    let faktor: Double?
+}
+
+/// <projekt>/cad/visningar/kanslighet.json (cad/kanslighet.py): hur ytorna flyttas per enhet av varje mått.
+struct Kanslighet: Decodable {
+    struct Matt: Decodable { let delta: Double; let delar: [String: Del]?; let fel: String? }
+    struct Del: Decodable { let ytor: [String: [Double]]; let max: Double; let ny_form: Bool? }
+    let stampel: String?
+    let parametrar: [String: Matt]
+}
+
+/// Inmatningsrutan vid ett måtthandtag i 3D-vyn (punkt i vyns koordinater, y nedåt).
+struct MattInmatning: Equatable {
+    let namn: String
+    let kort: String
+    let varde: Double
+    let enhet: String?
+    let punkt: CGPoint
 }
 
 /// Claude → appen: <projekt>/cad/claude.json

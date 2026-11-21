@@ -111,6 +111,12 @@ struct Workspace: View {
     private var canvas: some View {
         ZStack(alignment: .topLeading) {
             viewer
+            if let m = run.mattInmatning {
+                MattRuta(run: run, m: m)
+                    .fixedSize()
+                    .position(x: m.punkt.x + 14 + 90, y: m.punkt.y)
+                    .zIndex(5)
+            }
             VStack(alignment: .leading, spacing: 8) {
                 ToolBar(run: run, followPhotos: $followPhotos, cadStyle: $cadStyle, overlayOpacity: overlayOpacity)
                 if !run.dolPaneler {

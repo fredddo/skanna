@@ -6,6 +6,12 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Måtthandtag (21 nov):** välj en del (Välj) så får dess ändringsbara mått ett handtag – blått med måttlinje där
+  skriptet märkt måttet (`prj.mattlinje`, finns i mallarna låda/distans/vinkelfäste), lila pil annars (där delen ändras
+  mest). Dra handtaget längs måttet (0,5 mm-steg, ⇧ hela mm) – delen byggs om när du släpper – eller klicka och skriv ett
+  värde. Håll musen på ett handtag, eller på ett mått i Mått-listan, så färgas allt som ändras med måttet orange, även i
+  andra delar (t.ex. locket när lådan blir bredare). Relationerna räknas ut i bakgrunden efter varje bygge
+  (`cad/kanslighet.py`, några sekunder till en halv minut).
 - **Sprängvy (21 nov):** E heter nu Sprängvy och har ny ikon. Flyttar du delar (G) medan sprängvyn är på blir det sprängflyttar:
   de följer med reglaget och går ihop när sprängvyn slås av. **▶ / A** spelar upp ihop ↔ isär i en loop; Esc, A eller E
   stoppar. Sparar du en vy medan den spelar får miniatyren en ▶ och spelar upp när du klickar på den.

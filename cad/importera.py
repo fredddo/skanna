@@ -14,6 +14,7 @@ Enheter: STEP och 3MF bär egna enheter (räknas om till mm). STL/OBJ saknar enh
 orimligt liten/stor, ändra "<namn>: skala" (25,4 = tum → mm, 1000 = m → mm).
 """
 import json
+import os
 import math
 from pathlib import Path
 
@@ -131,7 +132,9 @@ def _mesh(prj, pid, namn, src, P, roll, farg, text, utskrift):
 
     n = _mesh_ytor(m, prj.cad / f"{pid}-ytor.json")
     export = None
-    if utskrift:
+    if utskrift and os.environ.get("SKANNA_SNABB"):
+        export = f"{pid}.3mf"                      # känslighetsbygget: bara ytorna
+    elif utskrift:
         p = m.copy()
         lo, hi = p.bounds
         p.apply_translation([-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]])

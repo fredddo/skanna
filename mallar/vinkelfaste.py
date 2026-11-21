@@ -45,4 +45,8 @@ with BuildPart() as b:
 prj.del_("vinkelfaste", "Vinkelfäste", b.part, farg="#2E7DD7", beskrivning=f"{W:g} mm brett, {t:g} mm tjockt",
          utskrift_solid=lambda s: s.rotate(Axis.Y, 90),
          bambu={"wall_loops": 4, "sparse_infill_density": "30%", "enable_support": 0})
+prj.mattlinje("bredd", (-W / 2, A, 0), (W / 2, A, 0), "vinkelfaste", faktor=2)
+prj.mattlinje("skänkel liggande", (W / 2, 0, 0), (W / 2, A, 0), "vinkelfaste")
+prj.mattlinje("skänkel stående", (W / 2, 0, 0), (W / 2, 0, Bh), "vinkelfaste")
+prj.mattlinje("tjocklek", (-W / 2, A * 0.3, 0), (-W / 2, A * 0.3, t), "vinkelfaste")
 prj.spara(beskrivning="Vinkelfäste från mall. Skriv ut liggande på sidan (ingen support, starkast i böjen).")

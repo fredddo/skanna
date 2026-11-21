@@ -55,4 +55,11 @@ prj.del_("lada", "Låda", lada, farg="#2E7DD7", beskrivning=f"{L:.0f} × {B:.0f}
 prj.del_("lock", "Lock", lock, farg="#E0A030", beskrivning="Läppen går ner innanför lådan",
          utskrift_solid=lambda s: s.rotate(Axis.X, 180),   # ovansidan nedåt; tillämpas på den kantbehandlade soliden
          bambu={"wall_loops": 3, "sparse_infill_density": "15%", "enable_support": 0, "top_shell_layers": 4})
+# måttlinjer = handtag i appen (dra eller klicka). Symmetriska mått: faktor 2 (handtaget sitter på ena sidan).
+prj.mattlinje("längd (inv)", (-L / 2, -B / 2, ztop), (L / 2, -B / 2, ztop), "lada", faktor=2)
+prj.mattlinje("bredd (inv)", (L / 2, -B / 2, ztop), (L / 2, B / 2, ztop), "lada", faktor=2)
+prj.mattlinje("höjd (inv)", (L / 2 + t, 0, tb), (L / 2 + t, 0, ztop), "lada")
+prj.mattlinje("väggtjocklek", (L / 2, B / 4, ztop), (L / 2 + t, B / 4, ztop), "lada")
+prj.mattlinje("bottentjocklek", (-L / 4, 0, 0), (-L / 4, 0, tb), "lada")
+prj.mattlinje("lock höjd", (-L / 2 - t, 0, ztop), (-L / 2 - t, 0, ztop + LH), "lock")
 prj.spara(beskrivning="Låda med lock från mall. Ändra måtten i listan – eller be Claude anpassa formen.")

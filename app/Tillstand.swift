@@ -93,7 +93,12 @@ final class Runner: ObservableObject {
     @Published var offsets: [String: SIMD3<Double>] = [:] { didSet { if offsets != oldValue { noteChange("Flytta") } } }
     /// Flytt gjord i sprängvyn: läggs till isärdragningen och skalas med reglaget, så den följer med ihop ↔ isär.
     @Published var sprangOffsets: [String: SIMD3<Double>] = [:] { didSet { if sprangOffsets != oldValue { noteChange("Flytta i sprängvyn") } } }
-    @Published var spelar = false                        // sprängvyn spelas upp (A): ihop ↔ isär i en loop  // tillfällig flytt per del-/objekt-id (mm)
+    @Published var spelar = false
+    @Published var kanslighet: Kanslighet?               // vad som ändras när ett mått ändras (bakgrundsbygge)
+    @Published var kanslighetKor = false
+    @Published var mattInmatning: MattInmatning?          // inmatningsrutan vid ett måtthandtag
+    @Published var relParam: String?                      // måttet musen står på i Mått-listan → visas i 3D
+    var kanslighetProc: Process?                        // sprängvyn spelas upp (A): ihop ↔ isär i en loop  // tillfällig flytt per del-/objekt-id (mm)
     @Published var underObjekt: [String: [UnderObjekt]] = [:]  // sätts av 3D-vyn efter laddning
     // Snitt: klick placerar planet; sparade vyer i cad/snittvyer.json
     @Published var snittPlaceras = false { didSet { if snittPlaceras { aktivSnittvy = nil } } }  // nästa klick lägger snittplanet
@@ -188,6 +193,7 @@ final class Runner: ObservableObject {
         hidden = Set(ov.dolda); pick = nil; ritning = nil; visadRitning = nil; mellanslag = false; focusQuestion = nil; snapped = nil; note = nil; buildError = nil; buildLog = ""
         selectedPart = nil; sectionOn = false; sectionLabel = nil; sectionCoord = nil
         traff = nil; info = nil; matning = nil; explode = 0; offsets = [:]; sprangOffsets = [:]; spelar = false; underObjekt = [:]
+        kanslighetProc?.terminate(); kanslighetProc = nil; kanslighet = nil; kanslighetKor = false; mattInmatning = nil; relParam = nil
         snittPlaceras = false; snittBegaran = nil; vyBegaran = nil
         vyer = cadFolder.flatMap { try? Data(contentsOf: $0.appendingPathComponent("vyer.json")) }
             .flatMap { try? JSONDecoder().decode([SparadVy].self, from: $0) } ?? []
@@ -201,6 +207,7 @@ final class Runner: ObservableObject {
             .flatMap { try? JSONDecoder().decode(ProjektFil.self, from: $0) }
         reloadCad()
         uppdateraGitLage()
+        startKanslighet()
     }
 
     // MARK: Lokalt tillstånd (användarens mått och stängda frågor)
@@ -233,6 +240,7 @@ final class Runner: ObservableObject {
         guard canEdit, let project = output else { return }
         if rebuilding { pendingRebuild = true; return }
         rebuilding = true
+        kanslighetProc?.terminate(); kanslighetProc = nil
         buildError = nil
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -262,6 +270,7 @@ final class Runner: ObservableObject {
                 self.reloadCad()
                 self.refreshScans()
                 if self.pendingRebuild { self.pendingRebuild = false; self.rebuild() }
+                else if proc.terminationStatus == 0 { self.startKanslighet() }
             }
         }
         do { try p.run() } catch { rebuilding = false; buildError = "Kunde inte starta bygget: \(error.localizedDescription)" }
@@ -540,6 +549,37 @@ final class Runner: ObservableObject {
             parts = []
         }
         loadAnswers()
+        loadKanslighet()
+    }
+
+    func loadKanslighet() {
+        let u = cadFolder?.appendingPathComponent("visningar/kanslighet.json")
+        let k = u.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONDecoder().decode(Kanslighet.self, from: $0) }
+        if k?.stampel != kanslighet?.stampel || (k == nil) != (kanslighet == nil) { kanslighet = k }
+    }
+
+    /// Räkna i bakgrunden ut vad varje mått påverkar (cad/kanslighet.py bygger om med måttet +1 i en tillfällig mapp).
+    /// Gör inget om resultatet redan stämmer med skript och mått.
+    func startKanslighet() {
+        guard canEdit, !rebuilding, let project = output, let sk = scriptFolder,
+              ((try? FileManager.default.contentsOfDirectory(atPath: sk.path)) ?? []).contains(where: { $0.hasSuffix(".py") }) else { return }
+        kanslighetProc?.terminate()
+        let p = Process()
+        p.executableURL = Hem.url.appendingPathComponent(".venv/bin/python")
+        p.arguments = [Hem.url.appendingPathComponent("cad/kanslighet.py").path, project.path]
+        var env = ProcessInfo.processInfo.environment
+        env["SKANNA_HEM"] = Hem.url.path
+        p.environment = env
+        p.qualityOfService = .background
+        p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+        p.terminationHandler = { [weak self] proc in
+            DispatchQueue.main.async {
+                guard let self, self.kanslighetProc === proc else { return }
+                self.kanslighetProc = nil; self.kanslighetKor = false
+                self.loadKanslighet()
+            }
+        }
+        do { try p.run(); kanslighetProc = p; kanslighetKor = true } catch { kanslighetKor = false }
     }
 
     func loadAnswers() {

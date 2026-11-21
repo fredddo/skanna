@@ -50,6 +50,7 @@ P = prj.parametrar("Fäste", {                 # grupp → "Fäste: bredd" i app
 d = prj.matt("Nederskal: längd ytter", 140.0) # mått som ett annat skript skrivit (t.ex. en referensdel ur skanningen)
 solid = ...
 prj.del_("faste", "Fäste", solid, roll="design", farg="#2E7DD7", beskrivning="…", utskrift_solid=solid.rotate(Axis.X, 180))
+prj.mattlinje("bredd", (-W / 2, 0, 0), (W / 2, 0, 0), "faste", faktor=2)   # handtag i appen (se nedan)
 prj.spara(beskrivning="…", fragor=[{"id": "faste-hal", "text": "…", "markering": [...]}])
 ```
 
@@ -57,6 +58,16 @@ prj.spara(beskrivning="…", fragor=[{"id": "faste-hal", "text": "…", "markeri
   när användaren ändrar ett mått eller trycker ⌘B, och visar felutskriften om bygget misslyckas.
 - Alla mått användaren ska kunna ändra ska ligga i `prj.parametrar(...)`. Appen skriver ändringar till
   `parametrar-anvandare.json` (källa blir `användare`) och skickar ett svar med `fraga_id: "parameter"`.
+- **Märk var måtten sitter** med `prj.mattlinje(namn, från, till, del, faktor=1)` (mm, delen på sin plats, före
+  `prj.spara`). Appen ritar en måttlinje med ett handtag i till-änden när delen är vald: användaren drar handtaget längs
+  linjen eller klickar och skriver ett värde. faktor = ändring av måttet per mm handtaget flyttas: 2 för symmetriska mått
+  (delen växer åt båda håll men handtaget sitter på ena sidan), 1 när ena änden står still. Märk de mått användaren
+  rimligen vill dra i (yttermått, höjder, tjocklekar); hoppa över spel och små detaljer. Omärkta mått får ett automatiskt
+  handtag där delen ändras mest.
+- Efter varje bygge räknar appen i bakgrunden ut vad varje mått påverkar (`cad/kanslighet.py`: bygger om med måttet +1
+  i en tillfällig mapp och jämför ytorna) → `cad/visningar/kanslighet.json`. Det visas som orange färg på allt som ändras
+  när användaren håller musen på ett handtag eller ett mått i listan. Du behöver inte göra något för det, men skriv
+  skript där mått som hör ihop verkligen räknas ur varandra (då syns relationen).
 - `prj.spara` skriver bara den egna gruppens mått och frågor (fältet `grupp`) – flera skript samsas om `geometri.json`.
 - Äldre skanningar med `modell-cad.step` byggs först med `bygg_alla.sh` (HiKOKI-projektet), därefter körs ev. del-skript i
   `cad/skript/` (t.ex. en mall eller import som användaren lagt till).

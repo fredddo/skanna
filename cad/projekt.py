@@ -35,6 +35,7 @@ class Projekt:
         self.cad.mkdir(parents=True, exist_ok=True)
         self.grupp = None
         self._params = []          # [(namn, värde, enhet, källa, osäkerhet)]
+        self._mattlinjer = []      # [{namn, fran, till, del, faktor, grupp}] – var måtten sitter (appens handtag)
         self.info = self._read(self.dir / "projekt.json", {})
 
     # ---- läsa ----------------------------------------------------------------------------------------------------
@@ -88,6 +89,17 @@ class Projekt:
             out[namn] = varde
             self._params.append((full, varde, enhet, kalla, osak))
         return out
+
+    def mattlinje(self, namn, fran, till, del_=None, faktor=1.0):
+        """Var ett mått sitter: en måttlinje från → till (mm, modellens ram, delen på sin plats). Appen ritar den med ett
+        handtag i till-änden: dra handtaget längs linjen (längdändring × faktor = ändring av måttet) eller klicka för att
+        skriva in ett värde. namn = kort namn i gruppen ("bredd") eller hela ("Låda: bredd"). faktor: t.ex. 2 om måttet är
+        symmetriskt och linjen bara går till mitten. Märk alla mått som användaren rimligen vill dra i."""
+        import unicodedata
+        full = namn if (": " in namn or not getattr(self, "grupp", None)) else f"{self.grupp}: {namn}"
+        self._mattlinjer.append({"namn": unicodedata.normalize("NFC", full),
+                                 "fran": [round(float(x), 3) for x in fran], "till": [round(float(x), 3) for x in till],
+                                 "del": del_, "faktor": float(faktor), "grupp": getattr(self, "grupp", None)})
 
     # ---- delar ---------------------------------------------------------------------------------------------------
     def _kantbehandla(self, pid, solid):
@@ -162,13 +174,16 @@ class Projekt:
         bambu = {"wall_loops": "4", "plast": "PETG", …}: Bambu Studio-inställningar för delen (skrivs till delar.json) –
         utgångsläget; cad/utskrift.json (appen/agenten) går före vid exporten, se cad/utskrift.py.
         Kantbehandling (cad/kantbehandling.json) görs först, så step/ytor/3mf alla får fillet/fas."""
+        import os
         from build123d import Location, Mesher, export_step, export_stl
+        snabb = bool(os.environ.get("SKANNA_SNABB"))   # känslighetsbygget (kanslighet.py) behöver bara ytorna
         orig = solid
         solid = self._kantbehandla(pid, solid)
-        export_step(solid, str(self.cad / f"{pid}.step"))
+        if not snabb:
+            export_step(solid, str(self.cad / f"{pid}.step"))
         n = export_faces(solid, self.cad / f"{pid}-ytor.json")
-        export = None
-        if utskrift:
+        export = f"{pid}.3mf" if (utskrift and snabb) else None
+        if utskrift and not snabb:
             if utskrift_solid is None:
                 ps = solid
             elif callable(utskrift_solid):
@@ -207,6 +222,7 @@ class Projekt:
             v = int(round(v)) if enhet in ("st", "°") and abs(v - round(v)) < 1e-9 else round(v, 3)
             params.append({"namn": full, "varde": v, "enhet": enhet, "kalla": kalla, "osakerhet": osak, "grupp": g})
         geo["parametrar"] = params
+        geo["mattlinjer"] = [m for m in geo.get("mattlinjer", []) if m.get("grupp") != g] + self._mattlinjer
         if fragor is not None:
             geo["fragor"] = [f for f in geo.get("fragor", []) if f.get("grupp") != g] + [dict(f, grupp=g) for f in fragor]
         if beskrivning and not geo.get("beskrivning"):

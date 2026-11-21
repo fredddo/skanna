@@ -315,6 +315,31 @@ enum ParamStyle {
 }
 
 /// Ett mått i listan; redigerbart när projektet har del-skript (eller en egen CAD-modell).
+/// Inmatningsrutan vid ett måtthandtag i 3D-vyn: skriv ett värde och tryck Enter (Esc stänger).
+struct MattRuta: View {
+    @ObservedObject var run: Runner
+    let m: MattInmatning
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(m.kort).font(.callout).foregroundStyle(.secondary)
+            TextField("", text: $draft).frame(width: 70).textFieldStyle(.roundedBorder).font(.callout.monospacedDigit())
+                .focused($focused)
+                .onSubmit { run.setParam(m.namn, draft, unit: m.enhet); run.mattInmatning = nil }
+                .onExitCommand { run.mattInmatning = nil }
+            if let e = m.enhet { Text(e).font(.callout).foregroundStyle(.secondary) }
+            Button { run.mattInmatning = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.regularMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.accentColor.opacity(0.5)))
+        .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+        .onAppear { draft = ParamStyle.format(m.varde, unit: m.enhet); DispatchQueue.main.async { focused = true } }
+    }
+}
+
 struct ParamRow: View {
     @ObservedObject var run: Runner
     let p: CadInfo.Param
@@ -343,6 +368,9 @@ struct ParamRow: View {
                     .tips(run.canEdit ? "Klicka för att ändra" : "Måttet kan inte ändras här (inget del-skript)")
             }
             Image(systemName: icon).foregroundStyle(color).tips(p.kalla ?? "")
+        }
+        .onHover { inne in
+            if inne { run.relParam = p.namn } else if run.relParam == p.namn { run.relParam = nil }
         }
         .contextMenu {
             if run.canEdit && p.varde != nil { Button("Ändra …") { startEdit() } }

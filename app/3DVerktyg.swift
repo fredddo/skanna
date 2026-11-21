@@ -273,7 +273,17 @@ extension ModelView.Coordinator {
     /// Hover: kant (Välj) eller fästpunkt (Mät) först, annars ytan under pekaren.
     func hover(_ p: NSPoint?) {
         guard let v = view else { return }
-        if dragLeaf != nil { return }
+        if dragLeaf != nil || handtagDrag != nil { return }
+        if tool == .valj {
+            let i = p.flatMap { handtagVid($0) }
+            setHoverHandtag(i)
+            if let i {
+                setHoverEdge(nil)
+                if hovered != nil { let old = hovered; hovered = nil; restyle(old) }
+                v.satTips(handtagTips(i))
+                return
+            }
+        }
         if tool == .rita {
             // Rita: fyrkanten fäster mot kanter/hörn, ytan under pennspetsen lyses upp
             ritHover(p)
@@ -537,6 +547,8 @@ extension ModelView.Coordinator {
             if px < 0 { let k = -px * u; n.scale = SCNVector3(k, 1, k) } else { let k = px * u; n.scale = SCNVector3(k, k, k) }
         }
         for (n, px) in scaled { s(n, px) }
+        for (n, px) in handtagScaled { s(n, px) }
+        placeraHandtagEtiketter()
         if snapMarker.parent != nil { s(snapMarker, 4.5) }
         if rit.markor.parent != nil { s(rit.markor, 15) }
     }
