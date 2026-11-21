@@ -53,6 +53,8 @@ struct Sidebar: View {
         let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .short; f.locale = Locale(identifier: "sv_SE"); return f
     }()
 
+    @State private var slapp = false
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -120,6 +122,9 @@ struct Sidebar: View {
             .padding(10)
         }
         .background(Color(nsColor: .underPageBackgroundColor))
+        // dra in en projektmapp eller CAD-filer (STEP, STL, 3MF, OBJ → nytt modellprojekt)
+        .dropDestination(for: URL.self) { urls, _ in run.oppnaFiler(urls); return true } isTargeted: { slapp = $0 }
+        .overlay { if slapp { RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor, lineWidth: 3).padding(3).allowsHitTesting(false) } }
     }
 
     private func row(_ s: ProjektPost) -> some View {
@@ -166,6 +171,7 @@ struct Sidebar: View {
 struct WelcomeView: View {
     @ObservedObject var run: Runner
     @State private var showGuide = false
+    @State private var slapp = false
 
     var body: some View {
         ScrollView {
@@ -204,10 +210,14 @@ struct WelcomeView: View {
                     }
                 }
                 if showGuide { Guide(printSheet: run.printSheet) }
+                Label("Dra in en STEP-, STL-, 3MF- eller OBJ-fil här (eller ⌘O) så blir den ett nytt modellprojekt – mät, snitt och skriv ut.",
+                      systemImage: "square.and.arrow.down").font(.callout).foregroundStyle(.secondary)
             }
             .padding(24)
             .frame(maxWidth: 980, alignment: .leading)
         }
+        .dropDestination(for: URL.self) { urls, _ in run.oppnaFiler(urls); return true } isTargeted: { slapp = $0 }
+        .overlay { if slapp { RoundedRectangle(cornerRadius: 12).stroke(Color.accentColor, lineWidth: 3).padding(6).allowsHitTesting(false) } }
     }
 
     private func card(_ title: String, _ icon: String, _ color: Color, _ text: String, _ button: String, _ key: String, action: @escaping () -> Void) -> some View {

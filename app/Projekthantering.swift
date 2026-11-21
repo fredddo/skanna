@@ -73,21 +73,43 @@ extension Runner {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
-        panel.allowedContentTypes = [UTType(filenameExtension: "obj")!, .usdz, .folder]
-        panel.message = "Välj en projektmapp – skanning (*.modell) eller modellprojekt (mapp med projekt.json eller cad/skript) – eller en modellfil (.obj/.usdz)"
-        guard panel.runModal() == .OK, let u = panel.url else { return }
-        var dir: ObjCBool = false
-        FileManager.default.fileExists(atPath: u.path, isDirectory: &dir)
-        if dir.boolValue {
-            if !extraFolders.contains(u.path) { extraFolders.append(u.path) }
-            refreshScans()
-            select(u)
-        } else {
-            output = u.deletingLastPathComponent()
-            model = u
-            screen = .projekt
-            computeDims()
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.usdz, .folder] + Runner.importAndelser.compactMap { UTType(filenameExtension: $0) }
+        panel.message = "Välj en projektmapp (skanning *.modell eller modellprojekt) – eller CAD-filer (STEP, STL, 3MF, OBJ): de blir delar i ett nytt modellprojekt"
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        if panel.urls.count == 1, panel.urls[0].pathExtension.lowercased() == "usdz" { oppnaModellfil(panel.urls[0]); return }
+        oppnaFiler(panel.urls)
+    }
+
+    /// Öppna (⌘O) eller dra in i projektlistan/startsidan: en projektmapp öppnas; CAD-filer (STEP, STL, 3MF, OBJ) blir delar
+    /// (cad/importera.py: ytor, kanter, kroppar – mät, snitt och utskrift fungerar) i ett nytt modellprojekt med filens namn.
+    /// (Dras filen in i 3D-vyn hamnar den i det öppna projektet i stället.)
+    func oppnaFiler(_ urls: [URL]) {
+        let fm = FileManager.default
+        var mappar: [URL] = [], filer: [URL] = []
+        for u in urls {
+            var dir: ObjCBool = false
+            guard fm.fileExists(atPath: u.path, isDirectory: &dir) else { continue }
+            if dir.boolValue { mappar.append(u) } else if Runner.kanImportera(u) { filer.append(u) }
         }
+        if let m = mappar.first, filer.isEmpty { oppnaMapp(m); return }
+        guard !filer.isEmpty else { toast = "Välj en projektmapp eller STEP-, STL-, 3MF- eller OBJ-filer"; return }
+        let namn = filer.count == 1 ? filer[0].deletingPathExtension().lastPathComponent : "Importerade delar"
+        guard createModelProject(name: namn, template: nil, message: "") != nil else { return }
+        importeraDelar(filer)
+    }
+
+    private func oppnaModellfil(_ u: URL) {
+        output = u.deletingLastPathComponent()
+        model = u
+        screen = .projekt
+        computeDims()
+    }
+
+    private func oppnaMapp(_ u: URL) {
+        if !extraFolders.contains(u.path) { extraFolders.append(u.path) }
+        refreshScans()
+        select(u)
     }
 
     func removeFromList(_ u: URL) {

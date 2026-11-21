@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Öppna STEP-filer:** ⌘O ("Öppna projekt …") tar nu också STEP/STL/3MF/OBJ – och de går att dra in i projektlistan
+  eller på startsidan. Filen blir en del i ett nytt modellprojekt med filens namn (ytor, kanter, kroppar: mät, snitt,
+  handtag och utskrift fungerar). Dras filen in i 3D-vyn hamnar den i det öppna projektet som förut.
 - **Modellprojekt syns:** projektlistan har nu en del "Ny från mall" (Låda med lock, Vridskiva, Distans, Vinkelfäste) –
   ett klick ger ett nytt modellprojekt i projektmappen. Mappknappen längst ner (och ⌘O, "Öppna projekt …") öppnar vilken
   projektmapp som helst; mappar med `cad/skript` räknas som projekt även utan projekt.json.
