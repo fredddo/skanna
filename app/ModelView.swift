@@ -68,12 +68,49 @@ struct ModelView: NSViewRepresentable {
             yaw = atan2(simd_dot(d, E2), simd_dot(d, E1))
         }
         func leavePhoto() { if snapped != nil { unsnap(); syncFromPov() } }
+        /// Vridning runt det valda (delens/kroppens mitt) eller, utan val, runt hela modellens mitt. Kameran hoppar inte:
+        /// både kameran och målpunkten svängs runt vridpunkten, så det man ser ligger kvar och svänger bara runt den.
         func orbit(_ dx: CGFloat, _ dy: CGFloat) {
             if follow, snapped != nil { scrub(dx); return }   // fotoläge: spola i videon
             leavePhoto()
+            let y0 = yaw, p0 = pitch
             yaw -= Float(dx) * 0.01
             pitch = max(-1.55, min(1.55, pitch + Float(dy) * 0.01))
+            let q = valtCentrum()?.0 ?? center
+            if simd_length(q - target) > 1e-4 {
+                let d0 = dir(y0, p0)
+                var h = d0 - simd_dot(d0, U) * U
+                if simd_length(h) < 1e-4 { h = cos(y0) * E1 + sin(y0) * E2 }
+                let axel = simd_normalize(simd_cross(simd_normalize(h), U))   // vågrät, vinkelrät mot blicken
+                let r = simd_quatf(angle: yaw - y0, axis: U) * simd_quatf(angle: pitch - p0, axis: axel)
+                target = q + r.act(target - q)
+            }
             applyCamera(animated: false)
+        }
+        /// Mitt och radie (världskoordinater, med flytt/sprängning) för vald kropp eller del; nil utan val.
+        func valtCentrum() -> (V3, Float)? {
+            let valda = leaves.values.filter { selectedLeaf != nil ? $0.id == selectedLeaf : ($0.del == selectedPart && selectedPart != nil) }
+            var lo = V3(repeating: .greatestFiniteMagnitude), hi = V3(repeating: -.greatestFiniteMagnitude)
+            for l in valda where !l.node.isHidden {
+                let m = l.node.simdWorldTransform
+                for i in 0..<8 {
+                    let c = V3(i & 1 == 0 ? l.lo.x : l.hi.x, i & 2 == 0 ? l.lo.y : l.hi.y, i & 4 == 0 ? l.lo.z : l.hi.z)
+                    let w = m * SIMD4<Float>(c, 1)
+                    let p = V3(w.x, w.y, w.z)
+                    lo = simd_min(lo, p); hi = simd_max(hi, p)
+                }
+            }
+            guard lo.x <= hi.x else { return nil }
+            return ((lo + hi) / 2, max(simd_length(hi - lo) / 2, 1))
+        }
+        /// Z: zooma in på det valda (samma vinkel), eller hela modellen utan val.
+        func zoomaTillValt() {
+            guard let (c, r) = valtCentrum() else { fitView(); return }
+            leavePhoto()
+            let r0 = radius
+            radius = r; let d = fitDistance(); radius = r0
+            target = c; dist = max(d, r0 * 0.25)
+            applyCamera(animated: true)
         }
         func pan(_ dx: CGFloat, _ dy: CGFloat) {
             guard let pov = view?.pointOfView, let v = view else { return }
@@ -426,6 +463,7 @@ struct ModelView: NSViewRepresentable {
                 "Topp": (-.pi / 2, 1.55), "Botten": (-.pi / 2, -1.55),
                 "+X": (0, 0), "−X": (.pi, 0), "+Y": (-.pi / 2 * -upSign, 0), "−Y": (.pi / 2 * -upSign, 0), "Persp": (-0.6, 0.6)]
             if name == "Hela" { fitView(); return }
+            if name == "Valt" { zoomaTillValt(); return }
             guard let (y, p) = views[name] else { return }
             unsnap()
             yaw = y; pitch = p; target = center; dist = fitDistance()

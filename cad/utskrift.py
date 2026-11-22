@@ -7,7 +7,7 @@
     cad/utskrift.py <projekt> <del> filament.nozzle_temperature=240 filament.filament_retraction_length=0.8
     cad/utskrift.py --plaster                          # plastsorter med installerad X2D 0.4-profil
 
-Filen skrivs av appen (inspektören, när en konstruktionsdel är vald) och av agenten:
+Filen skrivs av appen (pilen vid Skriv ut) och av agenten:
 
     {"delar": {"lock": {"plast": "PETG-CF", "wall_loops": "4", "sparse_infill_density": "25%",
                         "top_shell_layers": "5", "bottom_shell_layers": "4",

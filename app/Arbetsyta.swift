@@ -66,20 +66,7 @@ struct Workspace: View {
                 Button { run.redo() } label: { Image(systemName: "arrow.uturn.forward") }
                     .disabled(!run.canRedo).tips(run.redoName.map { "Gör om \($0) (⇧⌘Z)" } ?? "Inget att göra om (⇧⌘Z)")
             }
-            Menu {
-                if run.sectionOn && run.snapped == nil {
-                    Button("Bara snittet (det som syns, avskuret vid planet)") { run.exportBambuProject() }
-                    Button("Hela delarna (utan snitt)") { run.exportBambuProject(heladelar: true) }
-                } else {
-                    Button("Bambu Studio-projekt (alla synliga delar, inställningar satta)") { run.exportBambuProject() }
-                }
-                Button("Öppna delarnas 3MF-filer var för sig") { run.exportAll() }
-            } label: { Label("Skriv ut", systemImage: "printer") } primaryAction: { run.exportBambuProject() }
-                .fixedSize()
-                .disabled(!run.parts.contains { $0.export != nil })
-                .tips(run.sectionOn && run.snapped == nil
-                      ? "Skriv ut snittet: de synliga delarna avskurna där snittet går, snittytan mot plattan (⌘E). Menyn: hela delarna"
-                      : "Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
+            SkrivUtKnapp(run: run)
             Menu {
                 Picker("Bakgrund", selection: $background) { Text("Vit").tag(0); Text("Grå").tag(1); Text("Mörk").tag(2) }
                 Picker("Upp i 3D-vyn", selection: Binding(get: { Int(upSign) }, set: { UserDefaults.standard.set($0, forKey: upKey); upTick += 1 })) {
@@ -270,6 +257,7 @@ struct Workspace: View {
             case "x": run.sectionOn.toggle(); run.snittPlaceras = run.sectionOn
             case "r": run.resetLayout()
             case "o": withAnimation { showTree.toggle() }
+            case "z": run.request("Valt")
             default:
                 if e.keyCode == 53 {   // Esc: rensa val och mätning (fotoläget har egen Esc-knapp)
                     if run.spelar { run.spelar = false; return nil }
@@ -406,6 +394,83 @@ struct ToolBar: View {
     }
 }
 
+// MARK: - Skriv ut: knappen och rutan under pilen (utskriftsalternativ + inställningar per del)
+
+struct SkrivUtKnapp: View {
+    @ObservedObject var run: Runner
+    @State var visa = false                // (testriggen öppnar rutan direkt)
+    @State private var del: String?
+
+    private var kanSkriva: Bool { run.parts.contains { $0.export != nil } }
+    private var designdelar: [PartInfo] { run.parts.filter { $0.roll == "design" && ($0.export != nil || $0.foralder != nil) } }
+    /// Delen vars inställningar visas: den man valt i rutan, annars den valda i vyn, annars den första.
+    private var aktuell: String? {
+        let ids = designdelar.map(\.id)
+        if let d = del, ids.contains(d) { return d }
+        if let s = run.selectedPart ?? run.traff?.del {
+            let id = s.split(separator: "#").first.map(String.init) ?? s
+            if ids.contains(id) { return id }
+        }
+        return ids.first
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button { run.exportBambuProject() } label: { Label("Skriv ut", systemImage: "printer") }
+                .buttonStyle(.borderless).padding(.leading, 8).padding(.trailing, 6).padding(.vertical, 4)
+                .disabled(!kanSkriva)
+                .tips(run.sectionOn && run.snapped == nil
+                      ? "Skriv ut snittet: de synliga delarna avskurna där snittet går, snittytan mot plattan (⌘E)"
+                      : "Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
+            Divider().frame(height: 16)
+            Button { del = nil; visa.toggle() } label: { Image(systemName: "chevron.down").font(.caption.weight(.semibold)) }
+                .buttonStyle(.borderless).padding(.horizontal, 7).padding(.vertical, 4)
+                .tips("Utskriftsalternativ och inställningar per del (plast, väggar, infill …)")
+                .popover(isPresented: $visa, arrowEdge: .bottom) { ruta }
+        }
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+        .fixedSize()
+    }
+
+    private var ruta: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                if run.sectionOn && run.snapped == nil {
+                    rad("Bara snittet (det som syns, avskuret vid planet)", "square.split.diagonal") { run.exportBambuProject() }
+                    rad("Hela delarna (utan snitt)", "cube") { run.exportBambuProject(heladelar: true) }
+                } else {
+                    rad("Bambu Studio-projekt (alla synliga delar, inställningar satta)", "printer") { run.exportBambuProject() }
+                }
+                rad("Öppna delarnas 3MF-filer var för sig", "doc.on.doc") { run.exportAll() }
+            }
+            .disabled(!kanSkriva)
+            Divider()
+            if let pid = aktuell {
+                if designdelar.count > 1 {
+                    Picker("Inställningar för", selection: Binding(get: { pid }, set: { del = $0 })) {
+                        ForEach(designdelar) { Text($0.namn).tag($0.id) }
+                    }
+                    .pickerStyle(.menu).controlSize(.small)
+                }
+                ScrollView { UtskriftKort(run: run, pid: pid).padding(.trailing, 6) }
+                    .frame(maxHeight: 520)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Inga konstruktionsdelar att skriva ut än.").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(width: 360)
+    }
+
+    private func rad(_ t: String, _ ikon: String, _ gor: @escaping () -> Void) -> some View {
+        Button { visa = false; gor() } label: {
+            Label(t, systemImage: ikon).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 4)
+    }
+}
+
 // MARK: - Inspektören (mått på det valda, mätning, kantbehandling, utskriftsinställningar)
 
 struct Inspector: View {
@@ -414,17 +479,9 @@ struct Inspector: View {
     @State private var filletText = "1"
     @State private var fasText = "0,5"
 
-    /// Vald konstruktionsdel (även när en kropp i den är vald) – får utskriftskortet.
-    private var utskriftDel: String? {
-        guard run.tool != .rita, run.tool != .mat, run.matning == nil,
-              let s = run.selectedPart ?? run.traff?.del else { return nil }
-        let id = s.split(separator: "#").first.map(String.init) ?? s
-        return run.parts.first { $0.id == id && $0.roll == "design" }?.id
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let pid = utskriftDel { card { UtskriftKort(run: run, pid: pid) } }
             main
         }
     }

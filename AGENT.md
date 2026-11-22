@@ -203,7 +203,7 @@ CLI: `skanna` (video/fotomapp → modell; `--ordning sekventiell` för vridskiva
   konstruktionsdel en utskriftsorientering (`utskrift_solid`, gärna som funktion `lambda s: s.rotate(Axis.X, 180)`).
 
 ## Utskriftsinställningar per del (`cad/utskrift.json`)
-Varje konstruktionsdel har egna utskriftsinställningar som användaren ändrar i appen (inspektören, när delen är vald) och
+Varje konstruktionsdel har egna utskriftsinställningar som användaren ändrar i appen (pilen vid Skriv ut) och
 som du ändrar när användaren ber om det ("gör locket i PETG-CF med 4 väggar"):
 
 ```json

@@ -277,7 +277,7 @@ extension Runner {
     }
 }
 
-// MARK: - Kortet i inspektören
+// MARK: - Kortet (rutan under pilen vid Skriv ut)
 
 /// Utskriftsinställningar för vald konstruktionsdel. Fälten skriver cad/utskrift.json direkt (ingen ombyggnad behövs).
 struct UtskriftKort: View {
