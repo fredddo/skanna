@@ -53,8 +53,21 @@ struct Sidebar: View {
     }()
 
     @State private var slapp = false
+    @State private var bytNamn: ProjektPost?
+    @State private var nyttNamn = ""
 
     var body: some View {
+        lista
+            .alert("Byt namn på projektet", isPresented: Binding(get: { bytNamn != nil }, set: { if !$0 { bytNamn = nil } })) {
+                TextField("Namn", text: $nyttNamn)
+                Button("Byt namn") { if let s = bytNamn { run.bytNamnPaProjekt(s.id, till: nyttNamn) }; bytNamn = nil }
+                Button("Avbryt", role: .cancel) { bytNamn = nil }
+            } message: {
+                Text("Projektmappen byter också namn (en skanning behåller .modell). Historiken i git följer med.")
+            }
+    }
+
+    private var lista: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Projekt").font(.headline)
@@ -151,6 +164,8 @@ struct Sidebar: View {
         .buttonStyle(.plain)
         .listRowBackground(selected ? Color.accentColor.opacity(0.18) : Color.clear)
         .contextMenu {
+            Button("Byt namn …") { nyttNamn = s.name; bytNamn = s }
+            Divider()
             Button("Visa i Finder") { NSWorkspace.shared.activateFileViewerSelecting([s.id]) }
             Button("Kopiera sökväg") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(s.id.path, forType: .string) }
             Divider()

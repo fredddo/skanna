@@ -452,7 +452,7 @@ struct SkrivUtKnapp: View {
                     }
                     .pickerStyle(.menu).controlSize(.small)
                 }
-                ScrollView { UtskriftKort(run: run, pid: pid).padding(.trailing, 6) }
+                ScrollView { UtskriftKort(run: run, pid: pid, alltidOppen: true).padding(.trailing, 6) }
                     .frame(maxHeight: 520)
                     .fixedSize(horizontal: false, vertical: true)
             } else {

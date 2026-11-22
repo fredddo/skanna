@@ -243,6 +243,9 @@ som du ändrar när användaren ber om det ("gör locket i PETG-CF med 4 väggar
   och t.ex. `"Utskrift för Lock (lock): Plast (plast) = PETG-CF, Vägglager (wall_loops) = 4 (ändrat i appen, …)"`.
   Det är ingen tråd; ta hänsyn till det (t.ex. väggtjocklek i PETG-CF, toleranser) och svara bara om det påverkar
   konstruktionen.
+- **Byt namn på projekt:** användaren kan byta namn på ett projekt i projektlistan. Då byter projektmappen namn (och
+  `projekt.json` → `namn`), så projektets sökväg ändras. Arbetar du med ett projekt vars mapp plötsligt saknas: leta upp
+  det nya namnet i samma mapp (skanningar behåller `.modell`) och fortsätt där.
 - **Radera:** användaren kan radera en del i objektträdet. Delen hamnar i `cad/objekt.json` → `"borttagna"` (visas inte,
   skrivs inte ut), och gör delens del-skript (fältet `skript` i delar.json, som `prj.del_` skriver) bara den delen tas
   skriptet bort. Du får ett meddelande; ligger skriptet kvar (det gör fler delar) – ta bort delen ur skriptet om användaren

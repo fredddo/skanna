@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Byt namn på projekt:** högerklicka ett projekt i listan → Byt namn … Mappen byter också namn (skanningar behåller
+  `.modell`), och historiken i git följer med.
+- **Utskriftsinställningarna** är alltid utfällda i rutan under pilen vid Skriv ut.
 - **Vridning runt det valda:** väljer du en del vrider vyn runt delens mitt (utan val: hela modellens mitt), och vyn
   hoppar inte när vridpunkten byts. **Z** zoomar in på det valda (⌘0/dubbelklick: hela modellen).
 - **Utskriftsinställningarna** ligger nu under pilen vid Skriv ut: de två utskriftsvalen överst, under dem plast,

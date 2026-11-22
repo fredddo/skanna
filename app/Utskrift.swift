@@ -283,6 +283,7 @@ extension Runner {
 struct UtskriftKort: View {
     @ObservedObject var run: Runner
     let pid: String
+    var alltidOppen = false                // i rutan vid Skriv ut: alltid utfälld, ingen fällknapp
     @AppStorage("utskriftOppen") private var open = true
     @State private var plastText = ""
     @FocusState private var plastFokus: Bool
@@ -292,9 +293,11 @@ struct UtskriftKort: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Button { open.toggle() } label: {
-                    Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
-                }.buttonStyle(.plain).foregroundStyle(.secondary)
+                if !alltidOppen {
+                    Button { open.toggle() } label: {
+                        Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
+                    }.buttonStyle(.plain).foregroundStyle(.secondary)
+                }
                 Label("Utskrift", systemImage: "printer").font(.headline)
                 Text(del?.namn ?? pid).font(.callout).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
@@ -303,7 +306,7 @@ struct UtskriftKort: View {
                         .tips("Tillbaka till del-skriptets inställningar")
                 }
             }
-            if open { falt } else {
+            if open || alltidOppen { falt } else {
                 Text(sammanfattning).font(.caption).foregroundStyle(.secondary).lineLimit(4)
                     .contentShape(Rectangle()).onTapGesture { open = true }
             }

@@ -475,22 +475,42 @@ extension Runner {
         flyttaProjekt(src, till: u)
     }
 
+    /// Byt namn på ett projekt: namnet i projekt.json (om filen finns) och mappen (en skanning behåller .modell).
+    /// Mappbytet går som Flytta (historiken följer med, inställningar per sökväg flyttas).
+    func bytNamnPaProjekt(_ src: URL, till namn0: String) {
+        let namn = namn0.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        guard !namn.isEmpty, !namn.hasPrefix(".") else { error = "Ogiltigt namn."; return }
+        let pj = src.appendingPathComponent("projekt.json")
+        if let d = try? Data(contentsOf: pj), var o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
+            o["namn"] = namn
+            if let ny = try? JSONSerialization.data(withJSONObject: o, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
+                try? ny.write(to: pj, options: .atomic)
+            }
+        }
+        let ext = src.pathExtension
+        let mapp = !ext.isEmpty && !namn.lowercased().hasSuffix("." + ext.lowercased()) ? namn + "." + ext : namn
+        if mapp == src.lastPathComponent { refreshScans(); if output?.standardizedFileURL == src.standardizedFileURL { reloadCad() }; return }
+        flyttaProjekt(src, till: src.deletingLastPathComponent(), nyttNamn: mapp)
+    }
+
     /// Flytta en projektmapp in i `dir`. Hela mappen flyttas (bilder, video, mesh, cad/). Historiken:
     ///  · ändringar som inte är sparade committas först där projektet ligger nu
     ///  · i det gamla repot blir flytten en commit ("Flyttat till …"); gamla versioner finns kvar där
     ///  · i det nya repot skrivs projektets .gitignore och en första commit ("Flyttat hit från …")
-    func flyttaProjekt(_ src0: URL, till dir: URL, klar: (() -> Void)? = nil) {
+    func flyttaProjekt(_ src0: URL, till dir: URL, nyttNamn: String? = nil, klar: (() -> Void)? = nil) {
         let fm = FileManager.default
         let src = src0.standardizedFileURL
-        let dest = dir.standardizedFileURL.appendingPathComponent(src.lastPathComponent)
+        let dest = dir.standardizedFileURL.appendingPathComponent(nyttNamn ?? src.lastPathComponent)
+        let bytNamn = nyttNamn != nil && dir.standardizedFileURL == src.deletingLastPathComponent()
         if dest.path == src.path { return }
         if dest.path.hasPrefix(src.path + "/") { error = "Kan inte flytta ett projekt in i sig självt."; return }
-        if fm.fileExists(atPath: dest.path) { error = "Det finns redan en mapp \"\(src.lastPathComponent)\" i \(dir.path)."; return }
+        if fm.fileExists(atPath: dest.path) { error = "Det finns redan en mapp \"\(dest.lastPathComponent)\" i \(dir.path)."; return }
         let aktuell = output?.standardizedFileURL == src
         if aktuell { historikSpara(vanta: true) } else { historikSpara(src, vanta: true) }
         let byggs = fm.fileExists(atPath: src.appendingPathComponent("cad/skript").path)
         if aktuell { output = nil; model = nil }
-        toast = "Flyttar \(src.lastPathComponent) …"
+        toast = bytNamn ? "Byter namn på \(src.lastPathComponent) …" : "Flyttar \(src.lastPathComponent) …"
         Runner.gitKo.async { [weak self] in
             let gammalRot = Git.finns ? Git.rot(src) : nil
             var fel: String?
@@ -515,7 +535,7 @@ extension Runner {
                     if Git.kor(["config", "user.email"], i: g).ut.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         args += ["-c", "user.name=Skanna", "-c", "user.email=skanna@lokal"]
                     }
-                    _ = Git.kor(args + ["commit", "-q", "--no-verify", "-m", "Flyttat \(src.lastPathComponent) till \(dest.deletingLastPathComponent().path)", "--"] + stigar, i: g)
+                    _ = Git.kor(args + ["commit", "-q", "--no-verify", "-m", bytNamn ? "Bytt namn: \(src.lastPathComponent) → \(dest.lastPathComponent)" : "Flyttat \(src.lastPathComponent) till \(dest.deletingLastPathComponent().path)", "--"] + stigar, i: g)
                     notis = " Den tidigare historiken finns kvar i \(g.path)."
                 }
                 // nytt repo: .gitignore och första commit
@@ -530,7 +550,7 @@ extension Runner {
             DispatchQueue.main.async {
                 guard let self else { return }
                 if let fel {
-                    self.error = "Kunde inte flytta: " + fel
+                    self.error = (bytNamn ? "Kunde inte byta namn: " : "Kunde inte flytta: ") + fel
                     if aktuell { self.select(src) }
                     return
                 }
@@ -546,7 +566,7 @@ extension Runner {
                 }
                 self.refreshScans()
                 if aktuell { self.select(dest) }
-                self.toast = "Flyttat till \(dest.deletingLastPathComponent().lastPathComponent).\(notis)"
+                self.toast = bytNamn ? "Nytt namn: \(dest.lastPathComponent)" : "Flyttat till \(dest.deletingLastPathComponent().lastPathComponent).\(notis)"
                 klar?()
             }
         }
