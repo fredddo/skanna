@@ -580,11 +580,18 @@ extension ModelView.Coordinator {
         return !h.contains(leaf.del) && !h.contains(leaf.id)
     }
 
+    /// Sprängvyns enhet för ett objekt: en kropp i en del som är hopfälld i objektträdet hålls ihop med delen (delens id),
+    /// en utfälld dels kroppar sprängs var för sig (kroppens id).
+    func sprangGrupp(_ leaf: Leaf) -> String {
+        leaf.multi && !(run?.utfallda.contains(leaf.del) ?? false) ? leaf.del : leaf.id
+    }
+
     /// Explode gäller bara synliga objekt: de dras isär från sitt gemensamma mittpunkt, och avståndet står i proportion
     /// till hur stora de synliga objekten är tillsammans (inte hela modellen/skanningen). Dolda objekt står kvar.
-    func explodeVector(_ leaf: Leaf, centrum: V3, storlek: Float, t: Float) -> V3 {
+    /// `mitt` = gruppens mitt (alla kroppar i en hopfälld del får samma förflyttning).
+    func explodeVector(_ leaf: Leaf, mitt: V3, centrum: V3, storlek: Float, t: Float) -> V3 {
         guard synlig(leaf), storlek > 0 else { return .zero }
-        let d = leaf.center - centrum
+        let d = mitt - centrum
         let l = simd_length(d)
         guard l > 1e-3 else { return .zero }
         // riktning från mitten; avståndet växer med hur långt ut objektet ligger (relativt), så att yttre delar går längre
@@ -603,7 +610,7 @@ extension ModelView.Coordinator {
     func applyLayout(animated: Bool) {
         guard let run, spelTimer == nil else { return }   // uppspelningen placerar delarna själv
         func txt(_ d: [String: SIMD3<Double>]) -> String { d.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",") }
-        let key = "\(run.explode)|\(run.explode > 0 ? run.hidden.sorted().joined(separator: ",") : "")|" + txt(run.offsets) + "|" + txt(run.sprangOffsets)
+        let key = "\(run.explode)|\(run.explode > 0 ? run.hidden.sorted().joined(separator: ",") + "|" + run.utfallda.sorted().joined(separator: ",") : "")|" + txt(run.offsets) + "|" + txt(run.sprangOffsets)
         guard key != layoutKey else { return }
         layoutKey = key
         placeLeaves(t: Float(run.explode), duration: animated && !sectionOn && dragLeaf == nil ? 0.3 : 0)
@@ -618,10 +625,18 @@ extension ModelView.Coordinator {
         func off(_ id: String) -> V3 { run.offsets[id].map(f3) ?? .zero }
         func spr(_ id: String) -> V3 { run.sprangOffsets[id].map(f3) ?? .zero }
         let (centrum, storlek) = synligaMatt()
+        // gruppernas mitt (synliga objekt): en hopfälld del sprängs som en enhet
+        var grupper: [String: (V3, V3)] = [:]
+        for leaf in leaves.values where synlig(leaf) {
+            let g = sprangGrupp(leaf)
+            let (lo, hi) = grupper[g] ?? (V3(repeating: .infinity), V3(repeating: -.infinity))
+            grupper[g] = (simd_min(lo, leaf.lo), simd_max(hi, leaf.hi))
+        }
         SCNTransaction.begin()
         SCNTransaction.animationDuration = duration
         for leaf in leaves.values {
-            let e = explodeVector(leaf, centrum: centrum, storlek: storlek, t: t)
+            let mitt = grupper[sprangGrupp(leaf)].map { ($0.0 + $0.1) / 2 } ?? leaf.center
+            let e = explodeVector(leaf, mitt: mitt, centrum: centrum, storlek: storlek, t: t)
             if leaf.multi {
                 partNodes[leaf.del]?.simdPosition = off(leaf.del) + t * spr(leaf.del)
                 leaf.node.simdPosition = e + off(leaf.id) + t * spr(leaf.id)
@@ -663,7 +678,7 @@ extension ModelView.Coordinator {
         guard tool == .flytta, snapped == nil else { return false }
         guard let h = visibleHits(p).first, let id = leafID(of: h.node), let leaf = leaves[id] else { return false }
         dragLeaf = leaf
-        dragWhole = flags.contains(.option)
+        dragWhole = flags.contains(.option) || sprangGrupp(leaf) == leaf.del   // hopfälld del: hela delen följer med
         let nyckel = dragWhole ? leaf.del : leaf.id
         dragTotal = .zero; dragAxis = nil
         dragStart = ((run?.explode ?? 0) > 0 ? run?.sprangOffsets[nyckel] : run?.offsets[nyckel]).map(f3) ?? .zero

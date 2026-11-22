@@ -302,12 +302,12 @@ struct ToolBar: View {
             }
             sep
             Button { run.spelar = false; withAnimation(.easeInOut(duration: 0.3)) { run.explode = run.explode > 0 ? 0 : 1 } } label: {
-                Image(systemName: run.explode > 0 ? "square.3.layers.3d" : "square.3.layers.3d.down.right")
+                Image(systemName: run.explode > 0 ? "burst.fill" : "burst")
                     .foregroundStyle(run.explode > 0 ? Color.accentColor : Color.primary)
             }
             .buttonStyle(.borderless)
-            .tips(run.explode > 0 ? "Sprängvy på (E) – klicka för ihop. Flytta (G) i sprängvyn placerar delarna isär; det följer med reglaget och sparade vyer"
-                                  : "Sprängvy (E): dra isär de synliga delarna – bara visning")
+            .tips(run.explode > 0 ? "Sprängvy på (E) – klicka för ihop. Delar som är hopfällda i objektträdet hålls ihop med sina kroppar; fäll ut en del (▸) så dras dess kroppar isär var för sig. Flytta (G) i sprängvyn placerar delarna isär; det följer med reglaget och sparade vyer"
+                                  : "Sprängvy (E): dra isär de synliga delarna – bara visning. Delar som är hopfällda i objektträdet sprängs som en enhet; fäll ut en del (▸) så dras dess kroppar isär var för sig")
             if run.explode > 0 {
                 Slider(value: $run.explode, in: 0...1).frame(width: 80).tips("Hur långt isär")
                 Button { run.spelar.toggle() } label: { Image(systemName: run.spelar ? "stop.fill" : "play.fill") }

@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Sprängvyn** har en ny ikon (en explosion). Delar som är hopfällda i objektträdet sprängs som en enhet med alla sina
+  kroppar; fäll ut en del (▸) så dras dess kroppar isär var för sig. Flytta (G) av en kropp i en hopfälld del flyttar
+  hela delen.
 - **Byt namn på projekt:** högerklicka ett projekt i listan → Byt namn … Mappen byter också namn (skanningar behåller
   `.modell`), och historiken i git följer med.
 - **Utskriftsinställningarna** är alltid utfällda i rutan under pilen vid Skriv ut.

@@ -9,7 +9,6 @@ struct ObjektPanel: View {
     var hide: () -> Void
     @AppStorage("shading") private var scanStyle = 1
     @AppStorage("skanningOppen") private var scanOpen = true
-    @State private var expanded: Set<String> = []
     @State private var dropTarget: String?
 
     var body: some View {
@@ -181,9 +180,11 @@ struct ObjektPanel: View {
         let color = Color(nsColor: run.color(for: p))
         HStack(spacing: 2) {
             if subs.count > 1 {
-                Button { if expanded.contains(p.id) { expanded.remove(p.id) } else { expanded.insert(p.id) } } label: {
-                    Image(systemName: expanded.contains(p.id) ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
+                Button { if run.utfallda.contains(p.id) { run.utfallda.remove(p.id) } else { run.utfallda.insert(p.id) } } label: {
+                    Image(systemName: run.utfallda.contains(p.id) ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
                 }.buttonStyle(.plain).foregroundStyle(.secondary)
+                .tips(run.utfallda.contains(p.id) ? "Fäll ihop – i sprängvyn hålls kropparna då ihop med delen"
+                                                   : "Fäll ut kropparna – i sprängvyn dras de då isär var för sig")
             } else { Color.clear.frame(width: 12, height: 1) }
             // konstruktionsdelar: plasten först (samma som i Bambu Studio: "Lock (PETG-CF)")
             let sub = subs.count > 1 ? "\(subs.count) kroppar" : p.beskrivning
@@ -210,7 +211,7 @@ struct ObjektPanel: View {
             Divider()
             Button("Radera", role: .destructive) { run.raderaDel(p.id) }
         }
-        if expanded.contains(p.id) {
+        if run.utfallda.contains(p.id) {
             ForEach(subs) { s in
                 row(id: s.id, name: s.namn, sub: nil, color: color.opacity(0.7), icon: nil, indent: 26 + indent)
                     .contextMenu { Button("Visa bara den här") { isolate(s.id) }; Button("Visa alla") { run.hidden = [] } }

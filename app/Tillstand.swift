@@ -58,6 +58,7 @@ final class Runner: ObservableObject {
     var utskriftTimer: Timer?
     @Published var hidden: Set<String> = [] { didSet { if hidden != oldValue { noteChange("Visa/dölj"); saveObjektVisning() } } }
     @Published var objektOrdning: [String] = []          // användarens ordning i objektträdet (cad/objekt.json)
+    @Published var utfallda: Set<String> = []           // delar vars kroppar är utfällda i objektträdet (sprängs då var för sig)
     @Published var borttagna: Set<String> = []          // raderade delar (cad/objekt.json)
     @Published var egnaNamn: [String: String] = [:]      // användarens namn på delar (cad/objekt.json)
     static let panelerByts = Notification.Name("skanna.panelerByts")
