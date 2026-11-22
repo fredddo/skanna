@@ -9,18 +9,32 @@ extension Runner {
     }
 
     /// Projekt = *.modell*-mappar (video-skanningar) i Hämtade filer/Skrivbord/Dokument, plus alla mappar med projekt.json i projektmappen.
+    ///
+    /// Hämtade filer, Skrivbordet och Dokument är skyddade i macOS: varje mapp appen läser ger en fråga om åtkomst. De gås
+    /// därför bara igenom en gång; efter det läses bara de mappar som faktiskt hade skanningar ("modellPlatser"), plus
+    /// klippens mappar och projektmappen. En skanning på ett nytt ställe hittas via ⌘O (den läggs då i listan).
     func refreshScans() {
         let fm = FileManager.default
-        var places = [FileManager.SearchPathDirectory.downloadsDirectory, .desktopDirectory, .documentDirectory]
+        let standard = [FileManager.SearchPathDirectory.downloadsDirectory, .desktopDirectory, .documentDirectory]
             .compactMap { fm.urls(for: $0, in: .userDomainMask).first }
+        let sparade = UserDefaults.standard.stringArray(forKey: "modellPlatser")
+        var places = sparade.map { $0.map { URL(fileURLWithPath: $0, isDirectory: true) } } ?? standard
         places += clips.map { $0.deletingLastPathComponent() }
         var found = Set<URL>()
+        var medSkanningar = Set<String>()
         for place in Set(places) {
             let items = (try? fm.contentsOfDirectory(at: place, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
             for u in items where u.lastPathComponent.contains(".modell") {
                 var dir: ObjCBool = false
-                if fm.fileExists(atPath: u.path, isDirectory: &dir), dir.boolValue { found.insert(u.standardizedFileURL) }
+                if fm.fileExists(atPath: u.path, isDirectory: &dir), dir.boolValue {
+                    found.insert(u.standardizedFileURL)
+                    medSkanningar.insert(place.standardizedFileURL.path)
+                }
             }
+        }
+        if sparade == nil {   // första gången: kom ihåg vilka av standardmapparna som har skanningar
+            let std = Set(standard.map(\.standardizedFileURL.path))
+            UserDefaults.standard.set(medSkanningar.filter(std.contains).sorted(), forKey: "modellPlatser")
         }
         for u in (try? fm.contentsOfDirectory(at: Hem.projektRot, includingPropertiesForKeys: nil)) ?? []
         where fm.fileExists(atPath: u.appendingPathComponent("projekt.json").path) || u.lastPathComponent.contains(".modell")

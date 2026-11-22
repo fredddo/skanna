@@ -6,6 +6,11 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Färre åtkomstfrågor:** appen läser inte längre Hämtade filer, Skrivbordet och Dokument vid varje start – efter
+  första gången bara de av dem som har skanningar (för dig: Hämtade filer). Att frågorna kom tillbaka efter varje
+  ombygge beror på ad hoc-signeringen. Skapa en gång ett eget kodsigneringscertifikat "Skanna lokal" (Nyckelhanterare →
+  Certifikatassistent → Skapa ett certifikat …, Identitetstyp: Självsignerad rot, Certifikattyp: Kodsignering) så
+  signerar `bygg-beta.sh` med det och macOS kommer ihåg godkännandena mellan byggen.
 - **Håll mellanslag = prata, i alla verktyg:** mikrofonen i chattrutan lyssnar så länge mellanslag hålls nere – också
   medan du ritar eller klickar P-punkter. I skrivfältet skriver ett kort tryck ett vanligt mellanslag.
   **Ändrat i Rita:** vyn vrids nu med **⌥ + dra** (tidigare mellanslag + dra).

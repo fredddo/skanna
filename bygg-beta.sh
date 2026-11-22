@@ -51,7 +51,15 @@ cat > "$NEW/Contents/Info.plist" <<PLIST
   <key>NSSpeechRecognitionUsageDescription</key><string>Det du pratar in i chattrutan görs om till text – på Macen när det går.</string>
 </dict></plist>
 PLIST
-codesign --force --deep -s - "$NEW" >/dev/null 2>&1
+# Signering: med ett eget certifikat "Skanna lokal" (Nyckelhanterare → Certifikatassistent → Skapa ett certifikat …,
+# typ Kodsignering) behåller appen samma identitet mellan byggen, så macOS kommer ihåg mapp- och mikrofongodkännanden.
+# Utan det blir det ad hoc-signering och macOS frågar igen efter varje ombygge.
+if security find-certificate -c "Skanna lokal" >/dev/null 2>&1 && codesign --force --deep -s "Skanna lokal" "$NEW" >/dev/null 2>&1; then
+  echo "Signerad med certifikatet Skanna lokal"
+else
+  codesign --force --deep -s - "$NEW" >/dev/null 2>&1
+  echo "Ad hoc-signerad (inget certifikat 'Skanna lokal') – macOS frågar om mappar/mikrofon igen efter ombygget"
+fi
 if [[ -n "$ENV" ]]; then
   pkill -f "test/Skanna Beta Test.app/Contents/MacOS/Skanna Beta Test" 2>/dev/null && sleep 1
   rm -rf "$APP"; mv "$NEW" "$APP"; rm -rf "$BUILD"
