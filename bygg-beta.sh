@@ -47,6 +47,8 @@ cat > "$NEW/Contents/Info.plist" <<PLIST
   <key>SkannaProjektmapp</key><string>Skanna</string>
   <key>NSCameraUsageDescription</key><string>Skanna Beta använder iPhonen (Continuity Camera) eller en annan kamera för att ta stillbilder till skanningen.</string>
   <key>NSCameraUseContinuityCameraDeviceType</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>Håll mellanslag i chattrutan för att prata in det du vill skriva till Claude.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Det du pratar in i chattrutan görs om till text – på Macen när det går.</string>
 </dict></plist>
 PLIST
 codesign --force --deep -s - "$NEW" >/dev/null 2>&1

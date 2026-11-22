@@ -6,6 +6,10 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Peka och prata:** i Peka (P) får chattrutan fokus när du klickar en punkt, så du kan skriva direkt. Fler klick lägger
+  till B, C … och texten står kvar. Håll mellanslag i chattrutan (ett kort tryck skriver ett vanligt mellanslag) så
+  lyssnar mikrofonen tills du släpper. Texten skrivs in löpande med svensk taligenkänning, på Macen när den klarar det.
+  Första gången frågar macOS om mikrofon och taligenkänning.
 - **Öppna STEP-filer:** ⌘O ("Öppna projekt …") tar nu också STEP/STL/3MF/OBJ – och de går att dra in i projektlistan
   eller på startsidan. Filen blir en del i ett nytt modellprojekt med filens namn (ytor, kanter, kroppar: mät, snitt,
   handtag och utskrift fungerar). Dras filen in i 3D-vyn hamnar den i det öppna projektet som förut.

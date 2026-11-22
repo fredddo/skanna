@@ -624,6 +624,9 @@ struct ChattSkrivfalt: View {
     @State private var ignored: Traff?
     @FocusState private var focused: Bool
     @AppStorage(ChattText.nyckel) private var storlek = ChattText.standard
+    @StateObject private var dikt = Diktering()
+    @State private var mellanslagsVakt: Any?
+    @State private var haller: DispatchWorkItem?
 
     var body: some View {
         let anchor = (run.pick == nil && run.traff != nil && run.traff == ignored) ? nil : run.chatAnchor
@@ -653,18 +656,58 @@ struct ChattSkrivfalt: View {
                 .background(Capsule().fill(Color.red.opacity(0.10)))
             }
             HStack(spacing: 4) {
-                TextField(run.ritning == nil ? "Skriv till Claude – ny tråd …" : "Beskriv vad ritningen ska bli …", text: $draft, axis: .vertical)
+                if dikt.lyssnar {
+                    Image(systemName: "mic.fill").foregroundStyle(.red).symbolEffect(.pulse).tips("Lyssnar – släpp mellanslag när du är klar")
+                }
+                TextField(dikt.lyssnar ? "Lyssnar …" : run.ritning == nil ? "Skriv till Claude – ny tråd …" : "Beskriv vad ritningen ska bli …", text: $draft, axis: .vertical)
                     .lineLimit(1...6).textFieldStyle(.roundedBorder).font(.system(size: storlek)).focused($focused).onSubmit { send(anchor) }
                 Button { attachment = run.pickAttachment() } label: { Image(systemName: attachment == nil ? "paperclip" : "paperclip.circle.fill") }
                     .buttonStyle(.borderless).tips(attachment?.lastPathComponent ?? "Bifoga foto eller fil")
                 Button { send(anchor) } label: { Image(systemName: "paperplane.fill") }
                     .buttonStyle(.borderless)
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty && attachment == nil && run.ritning == nil)
-                    .tips("Skicka (↩), ny rad med ⇧↩")
+                    .tips("Skicka (↩), ny rad med ⇧↩ – håll mellanslag för att prata in texten")
             }
             if let a = attachment { Text("Bifogas: \(a.lastPathComponent)").font(.caption2).foregroundStyle(.secondary) }
+            if let f = dikt.fel { Text(f).font(.caption2).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
         }
         .onChange(of: run.skrivFokus) { _, _ in DispatchQueue.main.async { focused = true } }
+        .onAppear(perform: vaktaMellanslag)
+        .onDisappear {
+            if let m = mellanslagsVakt { NSEvent.removeMonitor(m) }
+            mellanslagsVakt = nil
+            dikt.stoppa()
+        }
+    }
+
+    /// Mellanslag i skrivfältet: ett tryck skriver ett mellanslag som vanligt; hålls det kvar (0,35 s) tas mellanslaget
+    /// bort och mikrofonen lyssnar tills det släpps. Den tolkade texten läggs efter det som redan står i fältet.
+    private func vaktaMellanslag() {
+        guard mellanslagsVakt == nil else { return }
+        mellanslagsVakt = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { e in
+            guard e.keyCode == 49 else {
+                if e.type == .keyDown, let h = haller { h.cancel(); haller = nil }   // skriver vidare: det var ett vanligt mellanslag
+                return e
+            }
+            if e.type == .keyUp {
+                if let h = haller { h.cancel(); haller = nil; return e }
+                if dikt.lyssnar { dikt.stoppa(); return nil }
+                return e
+            }
+            if dikt.lyssnar || haller != nil { return nil }                       // upprepningar medan det hålls
+            guard focused, !e.isARepeat,
+                  e.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return e }
+            let jobb = DispatchWorkItem {
+                haller = nil
+                if draft.hasSuffix(" ") { draft.removeLast() }
+                let bas = draft
+                let mellan = bas.isEmpty || bas.hasSuffix(" ") || bas.hasSuffix("\n") ? "" : " "
+                dikt.starta { t in draft = bas + mellan + t }
+            }
+            haller = jobb
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: jobb)
+            return e
+        }
     }
 
     private func dropAnchor() {

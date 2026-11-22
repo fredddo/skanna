@@ -492,7 +492,7 @@ final class Runner: ObservableObject {
     /// Peka-klick: lägg till en punkt – eller ta bort den om man klickar nära en befintlig (inom 1,5 mm).
     func pekaKlick(_ p: PickPoint) {
         func d(_ a: [Double], _ b: [Double]) -> Double { sqrt(zip(a, b).map { ($0 - $1) * ($0 - $1) }.reduce(0, +)) }
-        if let i = pekpunkter.firstIndex(where: { d($0.pos, p.pos) < 1.5 }) { pekpunkter.remove(at: i) } else { pekpunkter.append(p) }
+        if let i = pekpunkter.firstIndex(where: { d($0.pos, p.pos) < 1.5 }) { pekpunkter.remove(at: i) } else { pekpunkter.append(p); skrivFokus += 1 }   // ny punkt: skriv (eller håll mellanslag och prata) direkt
     }
 
     var pins: [CadInfo.Markering] {
