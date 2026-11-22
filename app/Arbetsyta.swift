@@ -359,8 +359,6 @@ struct ToolBar: View {
             .menuStyle(.borderlessButton).fixedSize().tips("Färgschema för delarna (olika projekt får olika scheman)")
             opacityControl
             sep
-            Button { run.request("Hela") } label: { Image(systemName: "viewfinder") }
-                .buttonStyle(.borderless).tips("Hela modellen (⌘0, dubbelklick) · vyer: ⌘1–⌘7")
             Button { run.dolPaneler.toggle() } label: {
                 Image(systemName: run.dolPaneler ? "rectangle.inset.filled" : "rectangle.dashed")
             }

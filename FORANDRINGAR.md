@@ -8,7 +8,7 @@ tillfällig mapp.
 ## Kort
 - **Radera delar:** högerklicka en del i objektträdet → Radera. Den försvinner direkt (också ur Skriv ut), och gör
   dess skript bara den delen tas skriptet bort. ⌘Z ångrar; Claude får veta.
-- **Ny toprad:** knappen för projektlistan ligger längst till vänster; Bygg om- och mapp-knapparna är borta (⌘B och
+- **Ny toprad:** knappen för projektlistan ligger längst till vänster; Bygg om- och mapp-knapparna och knappen Hela modellen i verktygsraden (⌘0 eller dubbelklick) är borta (⌘B och
   ⇧⌘R finns kvar, och i kugghjulsmenyn). **Historik** är en flik bredvid Samtal och Mått (⌘Y öppnar den).
 - **Vykuben:** alla sidors text står rätt när toppen är uppåt (förut låg HÖGER/VÄNSTER på sidan och BAK upp och ner).
 - **Utskrift:** tillägg från Claude/skriptet (temperatur, retraktion, brätte …) visas som läsbar text,
