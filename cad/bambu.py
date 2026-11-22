@@ -13,7 +13,9 @@ Inställningar per del (cad/utskrift.py): delens "bambu"-dict i delar.json (skri
 objektinställningar (model_settings.config) – t.ex. wall_loops, sparse_infill_density, top_shell_layers,
 bottom_shell_layers, enable_support, support_type, brim_type. Nyckeln "plast" (PLA, PETG, PETG-CF …; annars --material)
 väljer filamentprofil och står i objektnamnet: "Lock (PETG-CF)". Olika plaster ger en filamentplats per plast, och varje
-objekt får sin plats (extruder). Bambu Studio startas aldrig härifrån; filen öppnas av användaren.
+objekt får sin plats (extruder). Delens "filament"-dict (nozzle_temperature, filament_retraction_length …) skrivs in i
+plastens filamentplats (alla munstycksvarianter utom "nil") och står i different_settings_to_system; delar med samma plast
+delar plats, så olika värden på samma nyckel ger en varning (första delen vinner). Bambu Studio startas aldrig härifrån; filen öppnas av användaren.
 
 Projektinställningarna (project_settings.config) kommer ur bambu/x2d-<plast>-project_settings.json (en per plast, slås ihop
 till flera filamentplatser), som byggs av användarens installerade systemprofiler (X2D 0.4 + "0.20mm Standard @BBL X2D" +
@@ -191,6 +193,33 @@ def mall_for(profil):
     return json.loads(f.read_text())
 
 
+def satt_filament(inst, plats, varden, n):
+    """Skriv filament-värden i filamentplats `plats` (0-baserad av n). Per-filament-nycklar har n lika långa block;
+    i blocket ersätts varianterna som inte är "nil" (alla, om alla är "nil"). Returnerar nycklarna som inte gick."""
+    ref = json.loads(SKELETT.read_text())
+    ok, fel = [], []
+    for k, v in varden.items():
+        lst = inst.get(k)
+        # per filamentplats = skelettets lista (två filament) är dubbelt så lång som en plats i mallen
+        per_fil = isinstance(lst, list) and lst and len(lst) % n == 0 and isinstance(ref.get(k), list) \
+            and len(ref[k]) == 2 * (len(lst) // n)
+        if not per_fil:
+            fel.append(k)
+            continue
+        per = len(lst) // n
+        blk = lst[plats * per:(plats + 1) * per]
+        idx = [j for j, x in enumerate(blk) if x != "nil"] or list(range(per))
+        for j in idx:
+            lst[plats * per + j] = str(v)
+        ok.append(k)
+    if ok and "different_settings_to_system" in inst:
+        dst = inst["different_settings_to_system"]
+        if plats + 1 < len(dst):
+            gamla = [x for x in dst[plats + 1].split(";") if x]
+            dst[plats + 1] = ";".join(sorted(set(gamla) | set(ok)))
+    return fel
+
+
 def kombinera(profiler):
     """En filamentplats per profil (i ordning). Per-filament-nycklar = de vars lista i skelettet (två filament) är dubbelt
     så lång som i en enplatsmall; de läggs efter varandra. Övrigt (process, maskin) från första mallen."""
@@ -295,10 +324,11 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
         val = [d for d in val if (Path(stl_mapp) / f"{d['id']}.stl").exists()]
     if not val:
         raise SystemExit("inga konstruktionsdelar med utskriftsfil att exportera (kör Bygg om först?)")
-    from utskrift import gallande, las
+    from utskrift import filament_gallande, gallande, las
     utsk = las(cad)
     # plast och objektinställningar per del; en filamentplats per använd profil (i delarnas ordning)
     inst_per_del, profiler, plats = [], [], []
+    fil_per_plats = {}                                  # profil -> {nyckel: (värde, del)}
     for d in val:
         plast, s = gallande(d["id"], d.get("bambu"), utsk, material)
         prof, varn = profil_for(plast)
@@ -308,7 +338,24 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
             profiler.append(prof)
         inst_per_del.append((plast, s))
         plats.append(profiler.index(prof) + 1)
-    inst = json.dumps(kombinera(profiler), ensure_ascii=False, indent=4)
+        f = fil_per_plats.setdefault(prof, {})
+        for k, v in filament_gallande(d["id"], d.get("bambu"), utsk).items():
+            if k in f and f[k][0] != v:
+                print(f"varning: filament {k}: {d.get('namn') or d['id']} vill ha {v} men {f[k][1]} har {f[k][0]} "
+                      f"(samma plats, {plast}) – {f[k][0]} används", file=sys.stderr)
+                continue
+            f.setdefault(k, (v, d.get("namn") or d["id"]))
+    komb = kombinera(profiler)
+    for i, prof in enumerate(profiler):
+        varden = {k: v for k, (v, _) in fil_per_plats.get(prof, {}).items()}
+        if varden:
+            fel = satt_filament(komb, i, varden, len(profiler))
+            for k in fel:
+                print(f"varning: filament {k} finns inte som filamentinställning i mallen – ignoreras", file=sys.stderr)
+            if len(fel) < len(varden):
+                print(f"filament {_kort(prof)}: " + ", ".join(f"{k}={v}" for k, v in varden.items() if k not in fel),
+                      file=sys.stderr)
+    inst = json.dumps(komb, ensure_ascii=False, indent=4)
 
     meshar = []
     for d in val:

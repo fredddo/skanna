@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Filamentinställningar per del:** `cad/utskrift.json` kan nu ha `"filament": {"nozzle_temperature": "240", …}` per del
+  (temperatur, retraktion m.m.), och Skriv ut lägger in värdena i delens filamentplats i Bambu Studio-filen. Delar med
+  samma plast delar plats; olika värden ger en varning. De syns som `filament.…` under "Fler inställningar".
 - **Färre åtkomstfrågor:** appen läser inte längre Hämtade filer, Skrivbordet och Dokument vid varje start – efter
   första gången bara de av dem som har skanningar (för dig: Hämtade filer). Att frågorna kom tillbaka efter varje
   ombygge beror på ad hoc-signeringen. Skapa en gång ett eget kodsigneringscertifikat "Skanna lokal" (Nyckelhanterare →

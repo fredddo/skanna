@@ -19,17 +19,32 @@ struct LosVarde: Decodable, Hashable {
 }
 
 /// delar.json → "bambu": tålig avkodning (fel typ ger tom dict i stället för att hela dellistan faller).
+/// Den nästlade "filament"-dicten plattas till "filament.<nyckel>" (som i appen och cad/utskrift.py).
 struct BambuDict: Decodable, Hashable {
     var v: [String: String] = [:]
     init(_ v: [String: String]) { self.v = v }
+    private struct Nyckel: CodingKey {
+        var stringValue: String; var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
     init(from decoder: Decoder) throws {
-        let d = (try? decoder.singleValueContainer().decode([String: LosVarde].self)) ?? [:]
-        v = d.mapValues(\.s)
+        guard let c = try? decoder.container(keyedBy: Nyckel.self) else { return }
+        for k in c.allKeys {
+            if k.stringValue == Utskrift.filamentNyckel {
+                for (fk, fv) in (try? c.decode([String: LosVarde].self, forKey: k)) ?? [:] where !fv.s.isEmpty {
+                    v[Utskrift.filamentPrefix + fk] = fv.s
+                }
+            } else if let x = try? c.decode(LosVarde.self, forKey: k) { v[k.stringValue] = x.s }
+        }
     }
 }
 
 enum Utskrift {
     static let fil = "utskrift.json"
+    /// Filamentinställningar per del: {"filament": {nyckel: värde}} i filen, "filament.<nyckel>" i appen.
+    static let filamentNyckel = "filament"
+    static let filamentPrefix = "filament."
     static let grund = ["wall_loops", "sparse_infill_density", "top_shell_layers", "bottom_shell_layers", "enable_support", "support_type"]
     static let etikett: [String: String] = [
         "plast": "Plast", "wall_loops": "Vägglager", "sparse_infill_density": "Infill", "top_shell_layers": "Topplager",
@@ -103,6 +118,13 @@ extension Runner {
             guard let dict = v as? [String: Any] else { continue }
             var s: [String: String] = [:]
             for (k, x) in dict {
+                if k == Utskrift.filamentNyckel, let f = x as? [String: Any] {
+                    for (fk, fx) in f {
+                        if let t = fx as? String { if !t.isEmpty { s[Utskrift.filamentPrefix + fk] = t } }
+                        else if let n = fx as? NSNumber { s[Utskrift.filamentPrefix + fk] = n.stringValue }
+                    }
+                    continue
+                }
                 if let t = x as? String { s[k] = t }
                 else if let b = x as? Bool { s[k] = b ? "1" : "0" }
                 else if let n = x as? NSNumber { s[k] = Utskrift.normalisera(k, n.stringValue) }
@@ -115,7 +137,16 @@ extension Runner {
     private func writeUtskrift() {
         guard let u = utskriftURL else { return }
         var root = (try? Data(contentsOf: u)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-        root["delar"] = utskrift.filter { !$0.value.isEmpty }
+        root["delar"] = utskrift.filter { !$0.value.isEmpty }.mapValues { s -> [String: Any] in
+            var ut: [String: Any] = [:]
+            var fil: [String: String] = [:]
+            for (k, v) in s {
+                if k.hasPrefix(Utskrift.filamentPrefix) { fil[String(k.dropFirst(Utskrift.filamentPrefix.count))] = v }
+                else { ut[k] = v }
+            }
+            if !fil.isEmpty { ut[Utskrift.filamentNyckel] = fil }
+            return ut
+        }
         if let d = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
             try? d.write(to: u, options: .atomic)
         }
@@ -286,6 +317,7 @@ struct UtskriftKort: View {
         if !ovriga.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Fler inställningar (från Claude/skriptet)").font(.caption2).foregroundStyle(.secondary)
+                    .tips("filament.… = filamentinställning (temperatur, retraktion …). Delar med samma plast delar filamentplats i Bambu Studio")
                 ForEach(ovriga, id: \.0) { k, v, kalla in
                     HStack(spacing: 4) {
                         Text("\(k) = \(v)").font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)

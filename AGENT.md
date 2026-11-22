@@ -225,6 +225,15 @@ som du ändrar när användaren ber om det ("gör locket i PETG-CF med 4 väggar
   (visar alla delars gällande värden, varifrån de kommer och vilken filamentprofil plasten ger) och
   `cad/utskrift.py --plaster` (plaster med installerad X2D 0.4-profil). Redigera gärna JSON direkt, men behåll andra
   delars poster.
+- **Filament (temperatur, retraktion …):** filamentnycklar per del i en nästlad `"filament"`-dict, t.ex. mot trådar i PETG:
+  `{"delar": {"lock": {"plast": "PETG", "filament": {"nozzle_temperature": "240", "nozzle_temperature_initial_layer": "245",
+  "filament_retraction_length": "0.8"}}}}` eller `cad/utskrift.py <projekt> lock filament.nozzle_temperature=240`
+  (`--ta-bort filament.nozzle_temperature`). Nycklarna är Bambu Studios filamentnycklar (som i filamentprofilen:
+  `nozzle_temperature`, `nozzle_temperature_initial_layer`, `filament_retraction_length`, `filament_max_volumetric_speed`,
+  `fan_min_speed` …); värdet sätts i plastens filamentplats för alla munstycksvarianter som profilen inte lämnar `nil`.
+  **Delar med samma plast delar filamentplats**, så sätt samma värden på dem; vid olika värden vinner första delen i
+  ordningen och exporten varnar. Nycklar som inte är filamentinställningar ignoreras med en varning. Appen visar dem som
+  `filament.<nyckel>` under "Fler inställningar". Skriptet kan sätta detsamma i `bambu={"filament": {…}}`.
 - **Plast:** `PLA`, `PLA Matte`, `PETG`, `PETG HF`, `PETG-CF`, `ABS`, `ASA`, `PC`, `PA6-CF`, `TPU 95A` … slås upp som
   "Bambu <plast>[ Basic] @BBL X2D 0.4 nozzle" (annars "Generic <plast>"). Saknas en installerad profil används
   basplasten (`PETG-CF2` → PETG) eller PLA, och exporten skriver en varning som appen visar. Plasten står alltid i
