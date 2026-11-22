@@ -116,8 +116,8 @@ final class Runner: ObservableObject {
     @Published var ritning: Ritning?                     // väntande ritning (streck från samma vy, inte skickad än)
     @Published var visadRitning: Ritning?                // skickad ritning som visas i 3D-vyn
     @Published var ritBegaran: Ritning?                  // 3D-vyn flyger till ritningens vy och nollställer fältet
-    @Published var mellanslag = false                    // mellanslag nedhållet i Rita: dra = vrid
-    @Published var mikVaxla = 0                          // mikrofonen i chattrutan på/av utifrån (t.ex. medan man ritar)
+    @Published var mellanslag = false                    // ⌥ nedhållet i Rita: dra = vrid (namnet är historiskt)
+    @Published var mikHall = false                       // mellanslag hålls utanför skrivfältet: chattrutans mikrofon lyssnar
     @Published var skrivFokus = 0                        // ökas när ett streck är klart: skrivfältet i Samtal får fokus
     var ritBilder: [String: Data] = [:]                  // "<ritning>#<antal streck>" → PNG av vyn
     var ritBildSkala: [String: Double] = [:]

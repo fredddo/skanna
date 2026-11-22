@@ -41,7 +41,7 @@ struct Workspace: View {
         .onAppear(perform: installKeys)
         .onDisappear(perform: removeKeys)
         .onChange(of: run.skrivFokus) { _, _ in rightTab = 0 }
-        .onChange(of: run.mikVaxla) { _, _ in rightTab = 0 }   // ett streck är ritat: beskriv det i Samtal
+        .onChange(of: run.mikHall) { _, h in if h { rightTab = 0 } }   // ett streck är ritat: beskriv det i Samtal
         .onChange(of: run.tool) { _, t in if t != .rita { run.mellanslag = false } }
     }
 
@@ -233,13 +233,25 @@ struct Workspace: View {
 
     private func installKeys() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { e in
-            // Rita: mellanslag nedhållet = dra för att vrida (som handverktyget i ritprogram)
-            if e.keyCode == 49, run.screen == .projekt, run.tool == .rita, !(NSApp.keyWindow?.firstResponder is NSTextView) {
-                run.mellanslag = e.type == .keyDown
-                return nil
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { e in
+            // Rita: ⌥ nedhållet = dra för att vrida (handverktyget); mellanslag är "håll och prata" i alla verktyg
+            if e.type == .flagsChanged {
+                run.mellanslag = run.screen == .projekt && run.tool == .rita && e.modifierFlags.contains(.option)
+                return e
             }
-            if e.type == .keyUp { if e.keyCode == 49 { run.mellanslag = false }; return e }
+            // Håll mellanslag = mikrofonen i chattrutan lyssnar tills det släpps (i skrivfältet sköter fältet det själv)
+            if e.keyCode == 49 {
+                if e.type == .keyUp { if run.mikHall { run.mikHall = false; return nil }; return e }
+                if run.mikHall { return nil }
+                if run.screen == .projekt, !((e.window ?? NSApp.keyWindow)?.firstResponder is NSTextView), (e.window ?? NSApp.keyWindow)?.attachedSheet == nil,
+                   e.modifierFlags.intersection([.command, .control, .option]).isEmpty, !e.isARepeat {
+                    run.dolPaneler = false
+                    run.mikHall = true
+                    return nil
+                }
+                return e
+            }
+            if e.type == .keyUp { return e }
             // ⇥: släck/tänd alla paneler; Esc tänder dem igen
             if run.screen == .projekt, e.keyCode == 48, e.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
                !(NSApp.keyWindow?.firstResponder is NSTextView), NSApp.keyWindow?.attachedSheet == nil {

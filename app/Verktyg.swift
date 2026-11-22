@@ -18,7 +18,7 @@ enum Verktyg: String, CaseIterable, Identifiable {
         switch self {
         case .valj: return "Klicka på en del, yta eller kant för att se dess mått (V)"
         case .mat: return "Klicka två punkter, ytor eller kanter för att mäta avståndet (M)"
-        case .rita: return "Rita i vyn som på en utskrift och beskriv för Claude – starten fäster mot kanter. ⇧ = rak linje, mellanslag + dra = vrid (D)"
+        case .rita: return "Rita i vyn som på en utskrift och beskriv för Claude – starten fäster mot kanter. ⇧ = rak linje, ⌥ + dra = vrid, håll mellanslag = prata (D)"
         case .flytta: return "Dra en del för att flytta den tillfälligt – modellen ändras inte (G). Håll ⇧ för att dra rakt längs X, Y eller Z; i sprängvyn blir flytten en del av isärdragningen"
         case .peka: return "Klicka där något ska ändras (fler klick = B, C …) – skriv direkt i chattrutan, eller håll mellanslag och prata (P)"
         }

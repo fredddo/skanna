@@ -518,7 +518,7 @@ struct ShortcutsSheet: View {
     private let vanster: [Grupp] = [
         ("Verktyg", "cursorarrow", [
             ("V", "Välj – mått på det du klickar"), ("M", "Mät mellan två punkter"),
-            ("P", "Peka – A, B, C … till nästa chattmeddelande"), ("D", "Rita i vyn"), ("G", "Flytta del tillfälligt (⇧: rakt längs X/Y/Z)"),
+            ("P", "Peka – A, B, C … till nästa chattmeddelande"), ("D", "Rita i vyn (⌥ + dra = vrid)"), ("Mellanslag (håll)", "Prata in till chattrutan – släpp när du är klar"), ("G", "Flytta del tillfälligt (⇧: rakt längs X/Y/Z)"),
             ("Esc", "Avmarkera / rensa mätning och pekpunkter")]),
         ("Rita", "pencil.tip", [
             ("D, dra", "Rita – starten fäster mot kanter"), ("⇧", "Rak linje"), ("Mellanslag + dra", "Vrid vyn medan du ritar"),

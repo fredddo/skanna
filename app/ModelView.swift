@@ -736,6 +736,7 @@ struct ModelView: NSViewRepresentable {
             guard let c = coord, c.tool == .rita else { return nil }
             return c.run?.mellanslag == true ? NSCursor.openHand : Penna.markor
         }
+        v.optionVrider = { [weak coord = context.coordinator] in coord?.tool == .rita }
         v.allowsCameraControl = false   // egen styrning (se Coordinator.orbit/pan/zoom)
         v.autoenablesDefaultLighting = true
         v.antialiasingMode = .multisampling4X
@@ -1130,6 +1131,7 @@ final class HoverSCNView: SCNView {
     var onDrawMove: ((NSPoint, NSEvent.ModifierFlags) -> Void)?
     var onDrawEnd: ((NSPoint) -> Void)?
     var cursorProvider: (() -> NSCursor?)?
+    var optionVrider: (() -> Bool)?        // Rita: ⌥ + dra vrider (annars flyttar ⌥ + dra vyn)
     private var drawing = false
     private var lastDraw = NSPoint.zero
     private var capturing = false
@@ -1148,7 +1150,8 @@ final class HoverSCNView: SCNView {
         if drawing { lastDraw = convert(event.locationInWindow, from: nil); onDrawMove?(lastDraw, event.modifierFlags); return }
         if capturing { dragging = true; onItemDrag?(event.deltaX, event.deltaY); return }
         if !dragging { dragging = true; onDragStart?() }
-        if event.modifierFlags.contains(.option) || event.modifierFlags.contains(.shift) {
+        let vrid = event.modifierFlags.contains(.option) && optionVrider?() == true
+        if !vrid && (event.modifierFlags.contains(.option) || event.modifierFlags.contains(.shift)) {
             onPan?(event.deltaX, event.deltaY)
         } else {
             onOrbit?(event.deltaX, event.deltaY)

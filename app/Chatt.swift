@@ -676,9 +676,9 @@ struct ChattSkrivfalt: View {
             if let f = dikt.fel { Text(f).font(.caption2).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
         }
         .onChange(of: run.skrivFokus) { _, _ in DispatchQueue.main.async { focused = true } }
-        .onAppear(perform: vaktaMellanslag)
-        .onChange(of: run.mikVaxla) { _, _ in if dikt.lyssnar { dikt.stoppa() } else { vaxel = true; startaDiktat() } }
-        .onChange(of: dikt.lyssnar) { _, l in if !l { vaxel = false } }
+        .onAppear { vaktaMellanslag(); if run.mikHall && !dikt.lyssnar { startaDiktat() } }
+        .onChange(of: run.mikHall) { _, h in if h { if !dikt.lyssnar { vaxel = false; startaDiktat() } } else if dikt.lyssnar { dikt.stoppa() } }
+        .onChange(of: dikt.lyssnar) { _, l in if !l { vaxel = false; run.mikHall = false } }
         .onDisappear {
             if let m = mellanslagsVakt { NSEvent.removeMonitor(m) }
             mellanslagsVakt = nil
