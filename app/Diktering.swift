@@ -20,6 +20,7 @@ final class Diktering: ObservableObject {
         fel = nil
         slutat = false
         lyssnar = true
+        if ProcessInfo.processInfo.environment["SKANNA_INGEN_MIK"] != nil { print("diktering: startar (ingen mik i test)"); return }
         SFSpeechRecognizer.requestAuthorization { status in
             DispatchQueue.main.async {
                 guard status == .authorized else {

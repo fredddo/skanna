@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Claudes måttändringar syns:** "Ändrade mått" visar nu också mått som Claude ändrat i skripten, märkta (Claude) med
+  gammalt → nytt värde. Appen jämför måtten mellan byggena och sparar dem i `cad/parameterlogg.json` (gäller från nu).
+- **Mikrofonknapp** i chattrutan (tips: håll mellanslag) – klick startar/stoppar inspelningen.
 - **Peka och prata:** i Peka (P) får chattrutan fokus när du klickar en punkt, så du kan skriva direkt. Fler klick lägger
   till B, C … och texten står kvar. Håll mellanslag i chattrutan (ett kort tryck skriver ett vanligt mellanslag) så
   lyssnar mikrofonen tills du släpper. Texten skrivs in löpande med svensk taligenkänning, på Macen när den klarar det.

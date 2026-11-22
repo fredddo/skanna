@@ -139,6 +139,16 @@ struct Svar: Codable, Identifiable, Hashable {
 }
 struct SvarFil: Codable { var svar: [Svar] }
 
+/// Ett mått som det senast byggdes (cad/visningar/parametrar-senast.json).
+struct SkriptMatt: Codable, Equatable { var varde: Double; var kalla: String?; var enhet: String? }
+
+/// <projekt>/cad/parameterlogg.json: mått som ändrats i del-skripten (av Claude), upptäckta av appen mellan byggen.
+/// "varfor" får Claude fylla i efteråt.
+struct ParameterLogg: Codable {
+    struct Andring: Codable { var namn: String; var fran: Double; var till: Double; var enhet: String?; var tid: String; var varfor: String? = nil }
+    var andringar: [Andring]
+}
+
 /// <projekt>/cad/foton.json: bildrutor med kamerans läge i modellens ram (mm) och intrinsics.
 struct FotoInfo: Decodable, Hashable {
     let bild: String

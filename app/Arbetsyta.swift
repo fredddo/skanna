@@ -40,7 +40,8 @@ struct Workspace: View {
         }
         .onAppear(perform: installKeys)
         .onDisappear(perform: removeKeys)
-        .onChange(of: run.skrivFokus) { _, _ in rightTab = 0 }   // ett streck är ritat: beskriv det i Samtal
+        .onChange(of: run.skrivFokus) { _, _ in rightTab = 0 }
+        .onChange(of: run.mikVaxla) { _, _ in rightTab = 0 }   // ett streck är ritat: beskriv det i Samtal
         .onChange(of: run.tool) { _, t in if t != .rita { run.mellanslag = false } }
     }
 

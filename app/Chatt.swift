@@ -152,7 +152,7 @@ extension Runner {
                                   plats: nil, kant: nil, markering: false, closedByUser: false, lastTid: m.tid))
         }
         out.sort { $0.lastTid > $1.lastTid }
-        return (out, [], log)
+        return (out, [], (log + skriptMattLogg).sorted { $0.tid < $1.tid })
     }
 
     /// Arbetar Claude just nu? claude.json säger "arbetar" och har ändrats den senaste halvtimmen
@@ -627,6 +627,7 @@ struct ChattSkrivfalt: View {
     @StateObject private var dikt = Diktering()
     @State private var mellanslagsVakt: Any?
     @State private var haller: DispatchWorkItem?
+    @State private var vaxel = false          // startad med klick/kort tryck (Rita): ett nytt tryck stänger
 
     var body: some View {
         let anchor = (run.pick == nil && run.traff != nil && run.traff == ignored) ? nil : run.chatAnchor
@@ -656,11 +657,14 @@ struct ChattSkrivfalt: View {
                 .background(Capsule().fill(Color.red.opacity(0.10)))
             }
             HStack(spacing: 4) {
-                if dikt.lyssnar {
-                    Image(systemName: "mic.fill").foregroundStyle(.red).symbolEffect(.pulse).tips("Lyssnar – släpp mellanslag när du är klar")
-                }
                 TextField(dikt.lyssnar ? "Lyssnar …" : run.ritning == nil ? "Skriv till Claude – ny tråd …" : "Beskriv vad ritningen ska bli …", text: $draft, axis: .vertical)
                     .lineLimit(1...6).textFieldStyle(.roundedBorder).font(.system(size: storlek)).focused($focused).onSubmit { send(anchor) }
+                Button { if dikt.lyssnar { dikt.stoppa() } else { focused = true; vaxel = true; startaDiktat() } } label: {
+                    Image(systemName: dikt.lyssnar ? "mic.fill" : "mic").foregroundStyle(dikt.lyssnar ? Color.red : Color.secondary)
+                        .symbolEffect(.pulse, isActive: dikt.lyssnar)
+                }
+                .buttonStyle(.borderless)
+                .tips(dikt.lyssnar ? vaxel ? "Lyssnar – tryck mellanslag (space) eller klicka för att sluta" : "Lyssnar – släpp mellanslag (space) när du är klar" : "Prata in texten – håll mellanslag (space) eller klicka")
                 Button { attachment = run.pickAttachment() } label: { Image(systemName: attachment == nil ? "paperclip" : "paperclip.circle.fill") }
                     .buttonStyle(.borderless).tips(attachment?.lastPathComponent ?? "Bifoga foto eller fil")
                 Button { send(anchor) } label: { Image(systemName: "paperplane.fill") }
@@ -673,11 +677,20 @@ struct ChattSkrivfalt: View {
         }
         .onChange(of: run.skrivFokus) { _, _ in DispatchQueue.main.async { focused = true } }
         .onAppear(perform: vaktaMellanslag)
+        .onChange(of: run.mikVaxla) { _, _ in if dikt.lyssnar { dikt.stoppa() } else { vaxel = true; startaDiktat() } }
+        .onChange(of: dikt.lyssnar) { _, l in if !l { vaxel = false } }
         .onDisappear {
             if let m = mellanslagsVakt { NSEvent.removeMonitor(m) }
             mellanslagsVakt = nil
             dikt.stoppa()
         }
+    }
+
+    /// Börja lyssna; den tolkade texten läggs efter det som redan står i fältet.
+    private func startaDiktat() {
+        let bas = draft
+        let mellan = bas.isEmpty || bas.hasSuffix(" ") || bas.hasSuffix("\n") ? "" : " "
+        dikt.starta { t in draft = bas + mellan + t }
     }
 
     /// Mellanslag i skrivfältet: ett tryck skriver ett mellanslag som vanligt; hålls det kvar (0,35 s) tas mellanslaget
@@ -688,6 +701,11 @@ struct ChattSkrivfalt: View {
             guard e.keyCode == 49 else {
                 if e.type == .keyDown, let h = haller { h.cancel(); haller = nil }   // skriver vidare: det var ett vanligt mellanslag
                 return e
+            }
+            if vaxel {                                                             // på/av-läge: ett tryck i fältet stänger
+                guard focused else { return e }                                    // utanför fältet sköter Rita det
+                if e.type == .keyUp { dikt.stoppa() }
+                return nil
             }
             if e.type == .keyUp {
                 if let h = haller { h.cancel(); haller = nil; return e }
@@ -700,9 +718,7 @@ struct ChattSkrivfalt: View {
             let jobb = DispatchWorkItem {
                 haller = nil
                 if draft.hasSuffix(" ") { draft.removeLast() }
-                let bas = draft
-                let mellan = bas.isEmpty || bas.hasSuffix(" ") || bas.hasSuffix("\n") ? "" : " "
-                dikt.starta { t in draft = bas + mellan + t }
+                startaDiktat()
             }
             haller = jobb
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: jobb)

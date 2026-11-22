@@ -24,6 +24,8 @@ Ett projekt är en mapp. Två slags projekt, samma struktur:
     parametrar-anvandare.json  användarens egna värden {"Grupp: namn": värde} – går alltid före
     utskrift.json         utskriftsinställningar per del (plast, vägglager, infill …) – går före skriptets bambu={…}
     svar.json             användarens meddelanden/svar till agenten
+    parameterlogg.json    mått du ändrat i skripten (appen jämför byggena) – visas under "Ändrade mått" som (Claude);
+                          lägg gärna till "varfor" på dina rader
     claude.json           agentens status och svar (cad/meddela.py)
     stangda-fragor.json, bilagor/, foton.json, poser.json …
 ```

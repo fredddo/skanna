@@ -117,6 +117,7 @@ final class Runner: ObservableObject {
     @Published var visadRitning: Ritning?                // skickad ritning som visas i 3D-vyn
     @Published var ritBegaran: Ritning?                  // 3D-vyn flyger till ritningens vy och nollställer fältet
     @Published var mellanslag = false                    // mellanslag nedhållet i Rita: dra = vrid
+    @Published var mikVaxla = 0                          // mikrofonen i chattrutan på/av utifrån (t.ex. medan man ritar)
     @Published var skrivFokus = 0                        // ökas när ett streck är klart: skrivfältet i Samtal får fokus
     var ritBilder: [String: Data] = [:]                  // "<ritning>#<antal streck>" → PNG av vyn
     var ritBildSkala: [String: Double] = [:]
@@ -533,6 +534,7 @@ final class Runner: ObservableObject {
         if onlyIfChanged && stamp == cadStamp { return }
         cadStamp = stamp
         cad = (try? Data(contentsOf: json)).flatMap { try? JSONDecoder().decode(CadInfo.self, from: $0) }
+        loggaSkriptMatt(folder)
         claude = (try? Data(contentsOf: claudeURL)).flatMap { try? JSONDecoder().decode(ClaudeInfo.self, from: $0) }
         loadLocalState()
         loadUtskrift()
@@ -552,6 +554,45 @@ final class Runner: ObservableObject {
         }
         loadAnswers()
         loadKanslighet()
+    }
+
+    /// Mått som ändrats i skripten (av Claude) syns inte i svar.json. Jämför geometri.json med förra bygget
+    /// (cad/visningar/parametrar-senast.json) och lägg ändrade standardvärden i cad/parameterlogg.json. Ändringar där
+    /// användarens eget värde gäller (före eller efter) loggas redan av appen och hoppas över här.
+    func loggaSkriptMatt(_ folder: URL) {
+        guard let ps = cad?.parametrar else { return }
+        let senast = folder.appendingPathComponent("visningar/parametrar-senast.json")
+        var nu: [String: SkriptMatt] = [:]
+        for p in ps { if let v = p.varde { nu[p.namn] = SkriptMatt(varde: v, kalla: p.kalla, enhet: p.enhet) } }
+        let forra = (try? Data(contentsOf: senast)).flatMap { try? JSONDecoder().decode([String: SkriptMatt].self, from: $0) }
+        if forra == nu { return }
+        if let forra {
+            var nya: [ParameterLogg.Andring] = []
+            for (namn, n) in nu.sorted(by: { $0.key < $1.key }) {
+                guard let f = forra[namn], abs(f.varde - n.varde) > 1e-9, f.kalla != "användare", n.kalla != "användare" else { continue }
+                nya.append(.init(namn: namn, fran: f.varde, till: n.varde, enhet: n.enhet, tid: isoNu()))
+            }
+            if !nya.isEmpty {
+                let u = folder.appendingPathComponent("parameterlogg.json")
+                var logg = (try? Data(contentsOf: u)).flatMap { try? JSONDecoder().decode(ParameterLogg.self, from: $0) } ?? ParameterLogg(andringar: [])
+                logg.andringar += nya
+                let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                if let d = try? enc.encode(logg) { try? d.write(to: u, options: .atomic) }
+            }
+        }
+        try? FileManager.default.createDirectory(at: senast.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let d = try? JSONEncoder().encode(nu) { try? d.write(to: senast, options: .atomic) }
+    }
+
+    /// Claudes måttändringar som rader i "Ändrade mått".
+    var skriptMattLogg: [Svar] {
+        guard let u = cadFolder?.appendingPathComponent("parameterlogg.json"),
+              let l = (try? Data(contentsOf: u)).flatMap({ try? JSONDecoder().decode(ParameterLogg.self, from: $0) }) else { return [] }
+        return l.andringar.map { a in
+            let txt = a.varfor.map { " – " + $0 } ?? ""
+            return Svar(fraga_id: "parameter:" + a.namn, fraga: a.namn, svar: String(format: "%@ = %g → %g %@ (Claude)", a.namn, a.fran, a.till, a.enhet ?? "mm") + txt,
+                        bilaga: nil, tid: a.tid)
+        }
     }
 
     func loadKanslighet() {
