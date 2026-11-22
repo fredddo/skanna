@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Underdelar går att fälla ihop:** en del med underdelar (t.ex. Cellbädd under Distansring) har en pil ▸ i
+  objektträdet, precis som en del med flera kroppar. Hopfälld står underdelarnas namn efter "+", förälderns öga döljer
+  dem också, och i sprängvyn följer de med föräldern. Utfälld har varje underdel eget öga och sprängs för sig.
 - **Sprängvyn** har en ny ikon (en explosion). Delar som är hopfällda i objektträdet sprängs som en enhet med alla sina
   kroppar; fäll ut en del (▸) så dras dess kroppar isär var för sig. Flytta (G) av en kropp i en hopfälld del flyttar
   hela delen.

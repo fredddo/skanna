@@ -577,13 +577,18 @@ extension ModelView.Coordinator {
 
     func synlig(_ leaf: Leaf) -> Bool {
         guard let h = run?.hidden else { return true }
+        if let f = foralder(leaf.del), h.contains(f) { return false }
         return !h.contains(leaf.del) && !h.contains(leaf.id)
     }
+    func foralder(_ del: String) -> String? { run?.parts.first { $0.id == del }?.foralder }
 
     /// Sprängvyns enhet för ett objekt: en kropp i en del som är hopfälld i objektträdet hålls ihop med delen (delens id),
     /// en utfälld dels kroppar sprängs var för sig (kroppens id).
+    /// En barndel (foralder) under en hopfälld förälder följer föräldern.
     func sprangGrupp(_ leaf: Leaf) -> String {
-        leaf.multi && !(run?.utfallda.contains(leaf.del) ?? false) ? leaf.del : leaf.id
+        let ut = run?.utfallda ?? []
+        if let f = foralder(leaf.del), !ut.contains(f) { return f }
+        return leaf.multi && !ut.contains(leaf.del) ? leaf.del : leaf.id
     }
 
     /// Explode gäller bara synliga objekt: de dras isär från sitt gemensamma mittpunkt, och avståndet står i proportion

@@ -170,24 +170,28 @@ struct ObjektPanel: View {
     /// En del och dess barn (delar med "foralder" = delen), indragna under den. Ett barn har eget öga.
     @ViewBuilder private func partTree(_ p: PartInfo, indent: CGFloat = 0) -> some View {
         partRow(p, indent: indent)
-        ForEach(run.parts.filter { $0.foralder == p.id && $0.id != p.id }) { c in
-            partRow(c, indent: indent + 14)
+        if run.utfallda.contains(p.id) {
+            ForEach(run.parts.filter { $0.foralder == p.id && $0.id != p.id }) { c in
+                partRow(c, indent: indent + 14)
+            }
         }
     }
 
     @ViewBuilder private func partRow(_ p: PartInfo, indent: CGFloat = 0) -> some View {
         let subs = run.underObjekt[p.id] ?? []
+        let barn = run.parts.filter { $0.foralder == p.id && $0.id != p.id }
         let color = Color(nsColor: run.color(for: p))
         HStack(spacing: 2) {
-            if subs.count > 1 {
+            if subs.count > 1 || !barn.isEmpty {
                 Button { if run.utfallda.contains(p.id) { run.utfallda.remove(p.id) } else { run.utfallda.insert(p.id) } } label: {
                     Image(systemName: run.utfallda.contains(p.id) ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
                 }.buttonStyle(.plain).foregroundStyle(.secondary)
-                .tips(run.utfallda.contains(p.id) ? "Fäll ihop – i sprängvyn hålls kropparna då ihop med delen"
-                                                   : "Fäll ut kropparna – i sprängvyn dras de då isär var för sig")
+                .tips(run.utfallda.contains(p.id) ? "Fäll ihop – i sprängvyn hålls \(barn.isEmpty ? "kropparna" : "underdelarna") då ihop med delen"
+                                                   : "Fäll ut \(barn.isEmpty ? "kropparna" : "underdelarna") – i sprängvyn dras de då isär var för sig")
             } else { Color.clear.frame(width: 12, height: 1) }
             // konstruktionsdelar: plasten först (samma som i Bambu Studio: "Lock (PETG-CF)")
-            let sub = subs.count > 1 ? "\(subs.count) kroppar" : p.beskrivning
+            let sub = subs.count > 1 ? "\(subs.count) kroppar" : (!barn.isEmpty && !run.utfallda.contains(p.id)
+                ? "+ " + barn.map(\.namn).joined(separator: ", ") : p.beskrivning)
             row(id: p.id, name: p.namn, sub: p.roll == "design" ? ([run.plast(p.id)] + [sub].compactMap { $0 }).joined(separator: " · ") : sub,
                 color: color, icon: nil, indent: 0, renamable: true)
         }
@@ -211,7 +215,7 @@ struct ObjektPanel: View {
             Divider()
             Button("Radera", role: .destructive) { run.raderaDel(p.id) }
         }
-        if run.utfallda.contains(p.id) {
+        if run.utfallda.contains(p.id) && subs.count > 1 {
             ForEach(subs) { s in
                 row(id: s.id, name: s.namn, sub: nil, color: color.opacity(0.7), icon: nil, indent: 26 + indent)
                     .contextMenu { Button("Visa bara den här") { isolate(s.id) }; Button("Visa alla") { run.hidden = [] } }

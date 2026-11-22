@@ -1074,7 +1074,9 @@ struct ModelView: NSViewRepresentable {
     private func applyStyle(_ v: SCNView, _ c: Coordinator) {
         guard v.scene != nil else { return }
         c.scan.isHidden = hidden.contains("skanning") || c.snapped != nil
-        for (id, n) in c.partNodes { n.isHidden = hidden.contains(id) }
+        // en barndel (foralder) döljs också när föräldern döljs – som kropparna i en del
+        let foralder = Dictionary((c.run?.parts ?? []).compactMap { p in p.foralder.map { (p.id, $0) } }, uniquingKeysWith: { a, _ in a })
+        for (id, n) in c.partNodes { n.isHidden = hidden.contains(id) || foralder[id].map { hidden.contains($0) } == true }
         for leaf in c.leaves.values where leaf.multi { leaf.node.isHidden = hidden.contains(leaf.id) }
         c.rebuildSectionFill()
         guard c.appliedStyle != scanStyle else { return }
