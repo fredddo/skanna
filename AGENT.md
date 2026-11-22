@@ -243,6 +243,10 @@ som du ändrar när användaren ber om det ("gör locket i PETG-CF med 4 väggar
   och t.ex. `"Utskrift för Lock (lock): Plast (plast) = PETG-CF, Vägglager (wall_loops) = 4 (ändrat i appen, …)"`.
   Det är ingen tråd; ta hänsyn till det (t.ex. väggtjocklek i PETG-CF, toleranser) och svara bara om det påverkar
   konstruktionen.
+- **Radera:** användaren kan radera en del i objektträdet. Delen hamnar i `cad/objekt.json` → `"borttagna"` (visas inte,
+  skrivs inte ut), och gör delens del-skript (fältet `skript` i delar.json, som `prj.del_` skriver) bara den delen tas
+  skriptet bort. Du får ett meddelande; ligger skriptet kvar (det gör fler delar) – ta bort delen ur skriptet om användaren
+  vill, och låt `borttagna` vara. Ta inte tillbaka en raderad del utan att användaren ber om det.
 - **Objektträdet:** `cad/objekt.json` (`dolda`, `ordning`, `namn`) är användarens: släckta lager, ordning och egna namn
   på delar. Appen visar och exporterar delarna med de namnen (också i Bambu Studio). Byter användaren namn kommer en rad i
   loggen ("Bytte namn på delen …") – använd det namnet när du pratar om delen. Ändra inte filen själv.

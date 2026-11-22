@@ -86,6 +86,62 @@ enum Utskrift {
         return installerade.contains { $0.lowercased() == p || $0.lowercased() == "generic " + p }
     }
 
+    /// Svenska namn och enheter för vanliga tillägg (Bambu Studios nycklar); okända visas som nyckeln med mellanslag.
+    static let tillagg: [String: (String, String)] = [
+        "nozzle_temperature": ("munstycke", "°C"), "nozzle_temperature_initial_layer": ("första lagret", "°C"),
+        "hot_plate_temp": ("bädd", "°C"), "hot_plate_temp_initial_layer": ("bädd första lagret", "°C"),
+        "textured_plate_temp": ("texturplatta", "°C"), "textured_plate_temp_initial_layer": ("texturplatta första lagret", "°C"),
+        "cool_plate_temp": ("kall platta", "°C"), "eng_plate_temp": ("engineeringplatta", "°C"),
+        "filament_retraction_length": ("retraktion", "mm"), "filament_retraction_speed": ("retraktionsfart", "mm/s"),
+        "filament_deretraction_speed": ("återmatning", "mm/s"), "filament_z_hop": ("z-lyft", "mm"),
+        "filament_retraction_minimum_travel": ("retraktion från", "mm förflyttning"), "filament_wipe": ("torka av", ""),
+        "filament_max_volumetric_speed": ("max flöde", "mm³/s"), "filament_flow_ratio": ("flödesfaktor", ""),
+        "fan_min_speed": ("fläkt min", "%"), "fan_max_speed": ("fläkt max", "%"), "overhang_fan_speed": ("fläkt överhäng", "%"),
+        "close_fan_the_first_x_layers": ("fläkt av första", "lager"), "slow_down_layer_time": ("sakta ner under", "s/lager"),
+        "reduce_crossing_wall": ("undvik att korsa väggar", ""), "brim_type": ("brätte", ""), "brim_width": ("brätte", "mm"),
+        "sparse_infill_pattern": ("infillmönster", ""), "layer_height": ("lagerhöjd", "mm"),
+        "initial_layer_print_height": ("första lagrets höjd", "mm"), "seam_position": ("söm", ""),
+        "ironing_type": ("strykning", ""), "only_one_wall_top": ("en vägg på toppen", ""),
+        "wall_generator": ("väggar", ""), "outer_wall_speed": ("yttervägg", "mm/s"), "inner_wall_speed": ("innervägg", "mm/s"),
+        "travel_speed": ("förflyttning", "mm/s"), "support_threshold_angle": ("support från", "°"),
+        "support_on_build_plate_only": ("support bara från plattan", ""), "elefant_foot_compensation": ("elefantfot", "mm"),
+        "xy_contour_compensation": ("xy-kompensation yttre", "mm"), "xy_hole_compensation": ("xy-kompensation hål", "mm"),
+    ]
+    static let tillaggVarden: [String: String] = [
+        "no_brim": "inget", "auto_brim": "auto", "outer_only": "bara utsida", "inner_only": "bara insida",
+        "outer_and_inner": "ut- och insida", "brim_ears": "öron", "aligned": "i linje", "nearest": "närmast", "back": "bak",
+        "random": "slumpad", "no ironing": "ingen", "top": "toppytan", "topmost": "översta ytan", "solid": "alla massiva",
+        "gyroid": "gyroid", "grid": "rutnät", "cubic": "kubisk", "honeycomb": "bikaka", "rectilinear": "raka linjer",
+        "zig-zag": "sicksack", "line": "linjer", "triangles": "trianglar", "arachne": "Arachne", "classic": "klassisk",
+    ]
+    /// Läsordning för tilläggen: temperaturer, retraktion, fläkt, flöde – sedan övriga i bokstavsordning.
+    static let tillaggOrdning = ["nozzle_temperature", "nozzle_temperature_initial_layer", "hot_plate_temp", "hot_plate_temp_initial_layer",
+                                 "textured_plate_temp", "textured_plate_temp_initial_layer", "cool_plate_temp", "eng_plate_temp",
+                                 "filament_retraction_length", "filament_retraction_speed", "filament_deretraction_speed",
+                                 "filament_z_hop", "filament_retraction_minimum_travel", "filament_wipe", "fan_min_speed", "fan_max_speed",
+                                 "overhang_fan_speed", "filament_max_volumetric_speed", "filament_flow_ratio"]
+    static func sortera(_ rader: [(String, String, String)]) -> [(String, String, String)] {
+        func rang(_ k: String) -> Int {
+            let n = k.hasPrefix(filamentPrefix) ? String(k.dropFirst(filamentPrefix.count)) : k
+            return tillaggOrdning.firstIndex(of: n) ?? (tillagg[n] != nil ? 500 : 1000)
+        }
+        return rader.sorted { (rang($0.0), $0.0) < (rang($1.0), $1.0) }
+    }
+    static func namn(_ k: String) -> String {
+        let n = k.hasPrefix(filamentPrefix) ? String(k.dropFirst(filamentPrefix.count)) : k
+        return tillagg[n]?.0 ?? n.replacingOccurrences(of: "_", with: " ")
+    }
+    /// "munstycke 240 °C", "undvik att korsa väggar: på", "brätte inget".
+    static func mening(_ k: String, _ v: String) -> String {
+        let n = k.hasPrefix(filamentPrefix) ? String(k.dropFirst(filamentPrefix.count)) : k
+        let (namn, enhet) = tillagg[n] ?? (n.replacingOccurrences(of: "_", with: " "), "")
+        let tal = Double(v) != nil
+        if enhet.isEmpty && (v == "0" || v == "1") { return "\(namn): \(v == "1" ? "på" : "av")" }
+        var x = tal ? v.replacingOccurrences(of: ".", with: ",") : (tillaggVarden[v] ?? v)
+        if !enhet.isEmpty { x += (enhet == "%" || enhet == "°" ? "" : " ") + enhet }
+        return "\(namn) \(x)"
+    }
+
     static func varde(_ k: String, _ s: String) -> String {
         switch k {
         case "enable_support": return s == "1" ? "på" : "av"
@@ -248,7 +304,7 @@ struct UtskriftKort: View {
                 }
             }
             if open { falt } else {
-                Text(sammanfattning).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(sammanfattning).font(.caption).foregroundStyle(.secondary).lineLimit(4)
                     .contentShape(Rectangle()).onTapGesture { open = true }
             }
         }
@@ -260,7 +316,9 @@ struct UtskriftKort: View {
     private var sammanfattning: String {
         let v = { (k: String) in run.utskriftVarde(pid, k).0 }
         let sup = v("enable_support") == "1" ? "support \(Utskrift.varde("support_type", v("support_type")).lowercased())" : "utan support"
+        let extra = Utskrift.sortera(run.utskriftOvriga(pid)).map { Utskrift.mening($0.0, $0.1) }
         return "\(v("plast")) · \(v("wall_loops")) väggar · \(v("sparse_infill_density")) infill · \(v("top_shell_layers"))/\(v("bottom_shell_layers")) lager · \(sup)"
+            + (extra.isEmpty ? "" : " · " + extra.joined(separator: ", "))
     }
 
     @ViewBuilder private var falt: some View {
@@ -313,26 +371,38 @@ struct UtskriftKort: View {
             }
         }
         .controlSize(.small)
-        let ovriga = run.utskriftOvriga(pid)
+        let ovriga = Utskrift.sortera(run.utskriftOvriga(pid))
         if !ovriga.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Fler inställningar (från Claude/skriptet)").font(.caption2).foregroundStyle(.secondary)
-                    .tips("filament.… = filamentinställning (temperatur, retraktion …). Delar med samma plast delar filamentplats i Bambu Studio")
-                ForEach(ovriga, id: \.0) { k, v, kalla in
-                    HStack(spacing: 4) {
-                        Text("\(k) = \(v)").font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
-                            .foregroundStyle(kalla == "app" ? Color.pink : Color.primary)
-                        Spacer(minLength: 0)
-                        if kalla == "app" {
-                            Button { run.setUtskrift(pid, k, nil) } label: { Image(systemName: "xmark.circle") }
-                                .buttonStyle(.plain).foregroundStyle(.secondary).tips("Ta bort (tillbaka till skriptets värde)")
-                        }
-                    }
+            let fil = ovriga.filter { $0.0.hasPrefix(Utskrift.filamentPrefix) }
+            let ovr = ovriga.filter { !$0.0.hasPrefix(Utskrift.filamentPrefix) }
+            VStack(alignment: .leading, spacing: 4) {
+                if !fil.isEmpty { stycke("Filament (\(run.plast(pid)))", fil) }
+                if !ovr.isEmpty { stycke(fil.isEmpty ? "Dessutom" : "Övrigt", ovr) }
+            }
+            .padding(.top, 2)
+        }
+        Text("Sparas i cad/utskrift.json och gäller vid Skriv ut. Rosa = ändrat här eller av Claude; Claude får veta. Högerklicka ett tillägg för att ta bort det.")
+            .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Tillägg som löptext: "Filament (PETG): munstycke 240 °C, första lagret 245 °C, retraktion 0,8 mm."
+    /// Rosa = ändrat i appen eller av Claude; högerklick tar bort ett värde.
+    private func stycke(_ rubrik: String, _ rader: [(String, String, String)]) -> some View {
+        var t = AttributedString(rubrik + ": ")
+        t.font = .caption.bold()
+        for (i, (k, v, kalla)) in rader.enumerated() {
+            var del = AttributedString(Utskrift.mening(k, v) + (i == rader.count - 1 ? "." : ", "))
+            del.font = .caption
+            if kalla == "app" { del.foregroundColor = .pink }
+            t += del
+        }
+        return Text(t).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            .tips(rader.map { "\($0.0) = \($0.1)" }.joined(separator: "\n"))
+            .contextMenu {
+                ForEach(rader.filter { $0.2 == "app" }, id: \.0) { k, _, _ in
+                    Button("Ta bort \(Utskrift.namn(k))") { run.setUtskrift(pid, k, nil) }
                 }
             }
-        }
-        Text("Sparas i cad/utskrift.json och gäller vid Skriv ut. Rosa = ändrat här eller av Claude; Claude får veta.")
-            .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     private var typer: [(String, String)] {

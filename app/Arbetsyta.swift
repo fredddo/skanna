@@ -11,7 +11,7 @@ struct Workspace: View {
     @AppStorage("cadStyle") private var cadStyle = 2          // 0 fyllt, 1 kanter, 2 båda
     @AppStorage("shading") private var shading = 1
     @AppStorage("background") private var background = 0
-    @AppStorage("hogerflik") private var rightTab = 0          // 0 samtal, 1 mått
+    @AppStorage("hogerflik") private var rightTab = 0          // 0 samtal, 1 mått, 2 historik
     @AppStorage("visaObjektPanel") private var showTree = true
     @State private var importMal = false
     @State private var upTick = 0
@@ -42,6 +42,7 @@ struct Workspace: View {
         .onDisappear(perform: removeKeys)
         .onChange(of: run.skrivFokus) { _, _ in rightTab = 0 }
         .onChange(of: run.mikHall) { _, h in if h { rightTab = 0 } }   // ett streck är ritat: beskriv det i Samtal
+        .onChange(of: run.visaHistorik) { _, v in if v { run.visaHistorik = false; run.dolPaneler = false; rightTab = 2 } }   // ⌘Y
         .onChange(of: run.tool) { _, t in if t != .rita { run.mellanslag = false } }
     }
 
@@ -49,6 +50,10 @@ struct Workspace: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
+            Button { withAnimation { big.toggle() } } label: {
+                Image(systemName: big ? "sidebar.left" : "rectangle.leadinghalf.inset.filled")
+            }
+            .buttonStyle(.borderless).keyboardShortcut("f", modifiers: [.command, .shift]).tips("Dölj/visa projektlistan (⇧⌘F)")
             VStack(alignment: .leading, spacing: 1) {
                 Text(run.projectName).font(.title3.bold()).lineLimit(1)
                 Text(subtitle).font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
@@ -61,13 +66,6 @@ struct Workspace: View {
                 Button { run.redo() } label: { Image(systemName: "arrow.uturn.forward") }
                     .disabled(!run.canRedo).tips(run.redoName.map { "Gör om \($0) (⇧⌘Z)" } ?? "Inget att göra om (⇧⌘Z)")
             }
-            Button { run.visaHistorik = true } label: {
-                Image(systemName: "clock.arrow.circlepath").foregroundStyle(run.historikPa ? Color.primary : Color.orange)
-            }
-            .tips(run.historikPa ? "Historik: \(run.historik.count) versioner i git – gå tillbaka till en tidigare (⌘Y)"
-                                 : "Historik (⌘Y): projektet sparas inte i git – ingen historik mellan omstarter")
-            Button { run.rebuild() } label: { Label("Bygg om", systemImage: "hammer") }
-                .disabled(!run.canEdit || run.rebuilding).tips("Kör del-skripten igen (⌘B)")
             Menu {
                 if run.sectionOn && run.snapped == nil {
                     Button("Bara snittet (det som syns, avskuret vid planet)") { run.exportBambuProject() }
@@ -82,13 +80,14 @@ struct Workspace: View {
                 .tips(run.sectionOn && run.snapped == nil
                       ? "Skriv ut snittet: de synliga delarna avskurna där snittet går, snittytan mot plattan (⌘E). Menyn: hela delarna"
                       : "Öppna synliga konstruktionsdelar som ett färdigt Bambu Studio-projekt (⌘E)")
-            Button { run.openFolder() } label: { Image(systemName: "folder") }.tips("Öppna projektmappen i Finder (visa i Finder: ⇧⌘R)")
             Menu {
                 Picker("Bakgrund", selection: $background) { Text("Vit").tag(0); Text("Grå").tag(1); Text("Mörk").tag(2) }
                 Picker("Upp i 3D-vyn", selection: Binding(get: { Int(upSign) }, set: { UserDefaults.standard.set($0, forKey: upKey); upTick += 1 })) {
                     Text("+Z (som i Bambu Studio)").tag(1); Text("−Z (skalets öppning)").tag(-1)
                 }
                 Divider()
+                Button("Bygg om delarna (⌘B)") { run.rebuild() }.disabled(!run.canEdit || run.rebuilding)
+                Button("Visa projektet i Finder (⇧⌘R)") { run.revealProject() }
                 Button("Kopiera uppdrag till Claude") { run.copyClaudeText() }
                 if run.model != nil {
                     Button("Visa skanningen i Finder") { run.revealModel() }
@@ -97,10 +96,6 @@ struct Workspace: View {
                 Button("Kortkommandon …") { run.showShortcuts = true }
             } label: { Image(systemName: "gearshape") }
             .menuStyle(.borderlessButton).frame(width: 34).tips("Bakgrund, upp-riktning, uppdraget till Claude och kortkommandon (⌘/)")
-            Button { withAnimation { big.toggle() } } label: {
-                Image(systemName: big ? "sidebar.left" : "rectangle.leadinghalf.inset.filled")
-            }
-            .buttonStyle(.borderless).keyboardShortcut("f", modifiers: [.command, .shift]).tips("Dölj/visa projektlistan (⇧⌘F)")
         }
     }
 
@@ -577,10 +572,16 @@ struct RightPanel: View {
             Picker("", selection: $tab) {
                 Text(chatTitle).tag(0)
                 Text("Mått" + ((run.cad?.parametrar?.count).map { " (\($0))" } ?? "")).tag(1)
+                Text("Historik").tag(2)
             }
             .pickerStyle(.segmented).labelsHidden().padding(10)
+            .tips(tab == 2 ? "" : run.historikPa ? "Historik (⌘Y): \(run.historik.count) versioner i git" : "Historik (⌘Y): projektet sparas inte i git")
             Divider()
-            if tab == 0 { SamtalVy(run: run) } else { MattPanel(run: run) }
+            switch tab {
+            case 1: MattPanel(run: run)
+            case 2: HistorikVy(run: run, iPanel: true)
+            default: SamtalVy(run: run)
+            }
         }
         .background(Color(nsColor: .controlBackgroundColor))
     }

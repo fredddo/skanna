@@ -22,7 +22,6 @@ struct ContentView: View {
         .overlay(alignment: .bottom) { ToastView(run: run) }
         .sheet(isPresented: $run.showNewProject) { NewProjectSheet(run: run) }
         .sheet(isPresented: $run.showShortcuts) { ShortcutsSheet() }
-        .sheet(isPresented: $run.visaHistorik) { HistorikVy(run: run) }
         .onAppear {
             run.refreshScans()
             if !UserDefaults.standard.bool(forKey: "harSettValkommen") {
@@ -533,7 +532,7 @@ struct ShortcutsSheet: View {
             ("⌘N", "Nytt modellprojekt"), ("⌘O", "Öppna projekt"), ("⇧⌘R", "Visa projektet i Finder"),
             ("⌘,", "Inställningar: projektmapp och git")]),
         ("Ändra och spara", "arrow.uturn.backward", [
-            ("⌘Z", "Ångra"), ("⇧⌘Z", "Gör om"), ("⌘Y", "Historik – gå tillbaka till en tidigare version"),
+            ("⌘Z", "Ångra"), ("⇧⌘Z", "Gör om"), ("⌘Y", "Historik (fliken i högerpanelen) – gå tillbaka till en tidigare version"),
             ("⌘B", "Bygg om delarna"), ("⌥⌘I", "Importera del från fil (STEP, STL, 3MF, OBJ)"), ("⌘E", "Skriv ut (Bambu Studio)"), ("⇧⌘C", "Kopiera uppdrag till Claude")]),
         ("Delar", "square.stack.3d.up", [
             ("E", "Sprängvy: dra isär synliga delar / ihop igen"), ("A", "Spela upp sprängvyn (ihop ↔ isär) / stoppa"), ("R", "Lägg tillbaka allt som flyttats")]),

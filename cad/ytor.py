@@ -98,12 +98,13 @@ def export_faces(solid, path: Path, tolerance=0.02, angular=0.15):
     return len(ytor)
 
 
-def register_part(cad_dir, pid, namn, fil, roll, farg, export=None, beskrivning=None, bambu=None):
+def register_part(cad_dir, pid, namn, fil, roll, farg, export=None, beskrivning=None, bambu=None, skript=None):
     """Lägg till/uppdatera en del i <skanning>/cad/delar.json (som Skanna.app visar i objektträdet).
 
     roll: "referens" (rekonstruerad befintlig del) | "design" (ny del att tillverka)
     bambu: valfri dict med Bambu Studio-inställningar för delen (t.ex. {"wall_loops": "4"}).
     farg: "#RRGGBB"; export: filnamn (t.ex. "provring.3mf") som appens Exportera-knapp öppnar i Bambu Studio.
+    skript: del-skriptets filnamn i cad/skript/ (appens Radera tar bort skriptet om det bara gör den här delen).
     """
     path = Path(cad_dir) / "delar.json"
     data = json.loads(path.read_text()) if path.exists() else {"delar": []}
@@ -111,7 +112,10 @@ def register_part(cad_dir, pid, namn, fil, roll, farg, export=None, beskrivning=
     delar.append({"id": pid, "namn": namn, "fil": fil, "roll": roll, "farg": farg, "export": export,
                   "beskrivning": beskrivning})
     if bambu:
-        delar[-1]["bambu"] = {k: str(v) for k, v in bambu.items()}
+        delar[-1]["bambu"] = {k: ({fk: str(fv) for fk, fv in v.items()} if isinstance(v, dict) else str(v))
+                              for k, v in bambu.items()}
+    if skript:
+        delar[-1]["skript"] = skript
     order = {"referens": 0, "design": 1}
     data["delar"] = sorted(delar, key=lambda d: (order.get(d["roll"], 2), d["namn"]))
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2))

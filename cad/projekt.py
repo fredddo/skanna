@@ -206,8 +206,12 @@ class Projekt:
             m.add_shape(printed)
             m.write(str(self.cad / f"{pid}.3mf"))
             export = f"{pid}.3mf"
+        import sys
+        from pathlib import Path as _P
+        s = _P(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
+        skript = s.name if s and s.parent == (self.cad / "skript").resolve() else None
         register_part(self.cad, pid, namn, f"{pid}-ytor.json", roll, farg, export=export, beskrivning=beskrivning,
-                      bambu=bambu)
+                      bambu=bambu, skript=skript)
         print(f"{pid}: {n} ytor")
         return n
 

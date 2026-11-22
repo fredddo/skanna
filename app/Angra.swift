@@ -17,6 +17,7 @@ struct Ogonblick: Equatable {
     var sectionOn: Bool
     var ritning: Ritning?                 // väntande (inte skickad) ritning
     var utskrift: Data? = nil             // cad/utskrift.json (utskriftsinställningar per del)
+    var borttagna: Set<String> = []       // raderade delar (cad/objekt.json)
 
     func sammaModell(_ o: Ogonblick) -> Bool { overrides == o.overrides && kant == o.kant && skript == o.skript }
 }
@@ -39,7 +40,7 @@ extension Runner {
                          kant: cadFolder.flatMap { try? Data(contentsOf: $0.appendingPathComponent("kantbehandling.json")) },
                          skript: skript, hidden: hidden, offsets: offsets, sprangOffsets: sprangOffsets, explode: explode, partOpacity: partOpacity,
                          fargschema: fargschema, sectionOn: sectionOn, ritning: ritning,
-                         utskrift: utskriftURL.flatMap { try? Data(contentsOf: $0) })
+                         utskrift: utskriftURL.flatMap { try? Data(contentsOf: $0) }, borttagna: borttagna)
     }
 
     /// Anropas före (modelländringar, immediate) eller efter (visning, via didSet) en ändring.
@@ -100,6 +101,12 @@ extension Runner {
         ritning = b.ritning
         if sectionOn != b.sectionOn { sectionOn = b.sectionOn; if !b.sectionOn { snittPlaceras = false } }
         toast = message
+        if b.borttagna != borttagna {
+            borttagna = b.borttagna
+            saveObjektVisning()
+            reloadCad()
+            if b.sammaModell(current) { send(questionID: "parameter", question: "Ångra", text: message + " (i appen, cad/objekt.json \"borttagna\")", attachment: nil) }
+        }
         if b.utskrift != current.utskrift, let u = utskriftURL {
             // utskriftsinställningar: filen tillbaka, ingen ombyggnad behövs; Claude får veta (om inte modellen också ändras)
             utskriftTimer?.invalidate(); utskriftAndrade = [:]

@@ -58,6 +58,7 @@ final class Runner: ObservableObject {
     var utskriftTimer: Timer?
     @Published var hidden: Set<String> = [] { didSet { if hidden != oldValue { noteChange("Visa/dölj"); saveObjektVisning() } } }
     @Published var objektOrdning: [String] = []          // användarens ordning i objektträdet (cad/objekt.json)
+    @Published var borttagna: Set<String> = []          // raderade delar (cad/objekt.json)
     @Published var egnaNamn: [String: String] = [:]      // användarens namn på delar (cad/objekt.json)
     static let panelerByts = Notification.Name("skanna.panelerByts")
     @Published var dolPaneler = false { willSet { if newValue != dolPaneler { NotificationCenter.default.post(name: Runner.panelerByts, object: self) } } }                   // alla paneler släckta (⇥); Esc tänder igen
@@ -190,7 +191,7 @@ final class Runner: ObservableObject {
         undoPaused = true
         defer { resetUndo() }
         let ov = loadObjektVisning()
-        objektOrdning = ov.ordning; egnaNamn = ov.namn
+        objektOrdning = ov.ordning; egnaNamn = ov.namn; borttagna = Set(ov.borttagna ?? [])
         hidden = Set(ov.dolda); pick = nil; ritning = nil; visadRitning = nil; mellanslag = false; focusQuestion = nil; snapped = nil; note = nil; buildError = nil; buildLog = ""
         selectedPart = nil; sectionOn = false; sectionLabel = nil; sectionCoord = nil
         traff = nil; info = nil; matning = nil; explode = 0; offsets = [:]; sprangOffsets = [:]; spelar = false; underObjekt = [:]

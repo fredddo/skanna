@@ -207,6 +207,8 @@ struct ObjektPanel: View {
             if p.export != nil { Button("Öppna i Bambu Studio") { run.export(p) } }
             if run.offsets[p.id] != nil { Button("Lägg tillbaka (flyttad)") { run.offsets[p.id] = nil } }
             Button("Visa filer i Finder") { if let f = run.cadFolder { NSWorkspace.shared.activateFileViewerSelecting([f.appendingPathComponent(p.fil)]) } }
+            Divider()
+            Button("Radera", role: .destructive) { run.raderaDel(p.id) }
         }
         if expanded.contains(p.id) {
             ForEach(subs) { s in

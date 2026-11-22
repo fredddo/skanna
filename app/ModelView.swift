@@ -45,9 +45,7 @@ struct ModelView: NSViewRepresentable {
             guard sign != upSign else { return }
             upSign = sign
             U = SIMD3<Float>(0, 0, sign); E2 = SIMD3<Float>(0, sign, 0)
-            let names = sign < 0 ? ["BOTTEN", "GAVEL\n+X", "TOPP", "GAVEL\n−X", "SIDA\n+Y", "SIDA\n−Y"]
-                                 : ["TOPP", "HÖGER\n+X", "BOTTEN", "VÄNSTER\n−X", "BAK\n+Y", "FRAM\n−Y"]
-            (cubeBox.geometry as? SCNBox)?.materials = names.map { Coordinator.faceMaterial($0) }
+            (cubeBox.geometry as? SCNBox)?.materials = Coordinator.cubeMaterials(sign)
             if let v = view, v.scene != nil, snapped == nil { syncFromPov(); applyCamera(animated: false) }
         }
         var yaw: Float = -0.6, pitch: Float = 0.6, dist: Float = 200
@@ -166,7 +164,7 @@ struct ModelView: NSViewRepresentable {
             let scene = SCNScene()
             let box = SCNBox(width: 2, height: 2, length: 2, chamferRadius: 0.12)
             // SCNBox-ordning: +Z, +X, −Z, −X, +Y, −Y  (öppningen = −Z = TOPP)
-            box.materials = ["BOTTEN", "GAVEL\n+X", "TOPP", "GAVEL\n−X", "SIDA\n+Y", "SIDA\n−Y"].map { Coordinator.faceMaterial($0) }
+            box.materials = Coordinator.cubeMaterials(upSign)
             cubeBox.geometry = box
             scene.rootNode.addChildNode(cubeBox)
             scene.rootNode.addChildNode(cubeDots)
@@ -182,11 +180,25 @@ struct ModelView: NSViewRepresentable {
             v.addSubview(cv)
             cubeView = cv
         }
-        static func faceMaterial(_ text: String) -> SCNMaterial {
+        /// Kubens sidor i SCNBox-ordning (+Z, +X, −Z, −X, +Y, −Y) med texten vriden så att sidornas text står upprätt när
+        /// upp-riktningen (±Z) är uppåt. SCNBox lägger texturens "upp" längs +Y på ±Z/±X-sidorna, −Z på +Y och +Z på −Y,
+        /// och texturens "höger" är −Z på +X och +Z på −X; vridningen (grader moturs) vrider texten dit.
+        static func cubeMaterials(_ sign: Float) -> [SCNMaterial] {
+            if sign < 0 {   // upp = −Z (skanningar: öppningen)
+                return [faceMaterial("BOTTEN", rot: 180), faceMaterial("GAVEL\n+X", rot: -90), faceMaterial("TOPP"),
+                        faceMaterial("GAVEL\n−X", rot: 90), faceMaterial("SIDA\n+Y"), faceMaterial("SIDA\n−Y", rot: 180)]
+            }
+            return [faceMaterial("TOPP"), faceMaterial("HÖGER\n+X", rot: 90), faceMaterial("BOTTEN", rot: 180),
+                    faceMaterial("VÄNSTER\n−X", rot: -90), faceMaterial("BAK\n+Y", rot: 180), faceMaterial("FRAM\n−Y")]
+        }
+        static func faceMaterial(_ text: String, rot: CGFloat = 0) -> SCNMaterial {
             let img = NSImage(size: NSSize(width: 256, height: 256))
             img.lockFocus()
             NSColor(white: 0.93, alpha: 1).setFill(); NSRect(x: 0, y: 0, width: 256, height: 256).fill()
             NSColor(white: 0.6, alpha: 1).setStroke(); let p = NSBezierPath(rect: NSRect(x: 4, y: 4, width: 248, height: 248)); p.lineWidth = 6; p.stroke()
+            if rot != 0 {
+                let t = NSAffineTransform(); t.translateX(by: 128, yBy: 128); t.rotate(byDegrees: rot); t.translateX(by: -128, yBy: -128); t.concat()
+            }
             let para = NSMutableParagraphStyle(); para.alignment = .center
             let attr: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 50, weight: .bold), .foregroundColor: NSColor(white: 0.25, alpha: 1), .paragraphStyle: para]
             let lines = text.components(separatedBy: "\n").count

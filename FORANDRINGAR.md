@@ -6,6 +6,14 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Radera delar:** högerklicka en del i objektträdet → Radera. Den försvinner direkt (också ur Skriv ut), och gör
+  dess skript bara den delen tas skriptet bort. ⌘Z ångrar; Claude får veta.
+- **Ny toprad:** knappen för projektlistan ligger längst till vänster; Bygg om- och mapp-knapparna är borta (⌘B och
+  ⇧⌘R finns kvar, och i kugghjulsmenyn). **Historik** är en flik bredvid Samtal och Mått (⌘Y öppnar den).
+- **Vykuben:** alla sidors text står rätt när toppen är uppåt (förut låg HÖGER/VÄNSTER på sidan och BAK upp och ner).
+- **Utskrift:** tillägg från Claude/skriptet (temperatur, retraktion, brätte …) visas som läsbar text,
+  "Filament (PETG): munstycke 240 °C, första lagret 245 °C, retraktion 0,8 mm." – högerklicka för att ta bort ett.
+- **Appikon:** en kub som skannas (ritas av `ikon/rita_ikon.swift`, `ikon/bygg_ikon.sh` gör `app/AppIcon.icns`).
 - **Filamentinställningar per del:** `cad/utskrift.json` kan nu ha `"filament": {"nozzle_temperature": "240", …}` per del
   (temperatur, retraktion m.m.), och Skriv ut lägger in värdena i delens filamentplats i Bambu Studio-filen. Delar med
   samma plast delar plats; olika värden ger en varning. De syns som `filament.…` under "Fler inställningar".

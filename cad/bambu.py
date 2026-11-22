@@ -316,6 +316,8 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
     for d in delar:
         if (ov.get("namn") or {}).get(d["id"]):
             d["namn"] = ov["namn"][d["id"]]
+    borta = set(ov.get("borttagna") or [])                  # raderade i appen
+    delar = [d for d in delar if d["id"] not in borta]
     ordning = {i: k for k, i in enumerate(ov.get("ordning") or [])}
     delar.sort(key=lambda d: ordning.get(d["id"], len(ordning)))
     val = [d for d in delar if d.get("roll") == "design" and d.get("export")

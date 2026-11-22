@@ -238,7 +238,7 @@ extension Runner {
         // läs om allt från disk som om projektet öppnades igen, och bygg om delarna
         let ov = loadObjektVisning()
         undoPaused = true
-        objektOrdning = ov.ordning; egnaNamn = ov.namn; hidden = Set(ov.dolda)
+        objektOrdning = ov.ordning; egnaNamn = ov.namn; hidden = Set(ov.dolda); borttagna = Set(ov.borttagna ?? [])
         cadStamp = .distantPast
         reloadCad()
         resetUndo()
@@ -269,16 +269,19 @@ extension Runner {
 
 struct HistorikVy: View {
     @ObservedObject var run: Runner
+    var iPanel = false                    // fliken i högerpanelen (annars eget fönster med Klar)
     @Environment(\.dismiss) private var dismiss
     @State private var valj: HistorikPost?
     @State private var fel: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Historik").font(.title2.bold())
-                Spacer()
-                Button("Klar") { dismiss() }.keyboardShortcut(.defaultAction)
+            if !iPanel {
+                HStack {
+                    Text("Historik").font(.title2.bold())
+                    Spacer()
+                    Button("Klar") { dismiss() }.keyboardShortcut(.defaultAction)
+                }
             }
             lageRuta
             if run.historik.isEmpty {
@@ -301,16 +304,17 @@ struct HistorikVy: View {
                     }
                     .tips(p.text)
                 }
-                .frame(minHeight: 280)
+                .frame(minHeight: iPanel ? 120 : 280)
             }
             Text("⌘Z ångrar enskilda steg medan appen är öppen. Historiken här finns kvar mellan omstarter och omfattar även Claudes ändringar. Att gå tillbaka blir en ny version – inget skrivs över, och samtalet med Claude ligger kvar.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
-        .frame(width: 580)
+        .padding(iPanel ? 12 : 20)
+        .frame(width: iPanel ? nil : 580)
+        .frame(maxWidth: iPanel ? .infinity : nil, maxHeight: iPanel ? .infinity : nil, alignment: .topLeading)
         .onAppear { run.uppdateraGitLage() }
         .confirmationDialog("Gå tillbaka till \(valj?.kort ?? "")?", isPresented: Binding(get: { valj != nil }, set: { if !$0 { valj = nil } })) {
-            Button("Gå tillbaka") { if let v = valj { run.historikTillbaka(v); dismiss() } }
+            Button("Gå tillbaka") { if let v = valj { run.historikTillbaka(v); if !iPanel { dismiss() } } }
         } message: {
             Text("Delarnas skript, mått och inställningar blir som \(valj?.datum.formatted(date: .abbreviated, time: .shortened) ?? ""). Nuvarande läge sparas först som en egen version, så du kan komma tillbaka hit.")
         }
