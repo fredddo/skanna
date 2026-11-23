@@ -49,7 +49,10 @@ enum Utskrift {
     static let etikett: [String: String] = [
         "plast": "Plast", "wall_loops": "Vägglager", "sparse_infill_density": "Infill", "top_shell_layers": "Topplager",
         "bottom_shell_layers": "Bottenlager", "enable_support": "Support", "support_type": "Supporttyp",
+        "stodplast": "Stödplast",
     ]
+    /// Plaster som passar som stödets kontaktyta på hjälpmunstycket (Bowden): släpper från PETG/PETG-CF/PC/PA.
+    static let stodplaster = ["PLA", "PLA Matte", "PETG", "Support for PLA/PETG"]
     static let supporttyper: [(String, String)] = [("tree(auto)", "Träd (auto)"), ("normal(auto)", "Normal (auto)"),
                                                    ("tree(manual)", "Träd (manuell)"), ("normal(manual)", "Normal (manuell)")]
     static let standardPlast = "PLA"
@@ -222,7 +225,7 @@ extension Runner {
     func utskriftOvriga(_ pid: String) -> [(String, String, String)] {
         var keys = Set(utskrift[pid]?.keys.map { $0 } ?? [])
         keys.formUnion(parts.first { $0.id == pid }?.bambu?.v.keys.map { $0 } ?? [])
-        keys.subtract(Utskrift.grund + ["plast"])
+        keys.subtract(Utskrift.grund + ["plast", "stodplast"])
         return keys.sorted().map { k in let (v, kalla) = utskriftVarde(pid, k); return (k, v, kalla) }
     }
 
@@ -318,7 +321,9 @@ struct UtskriftKort: View {
 
     private var sammanfattning: String {
         let v = { (k: String) in run.utskriftVarde(pid, k).0 }
-        let sup = v("enable_support") == "1" ? "support \(Utskrift.varde("support_type", v("support_type")).lowercased())" : "utan support"
+        var sup = v("enable_support") == "1" ? "support \(Utskrift.varde("support_type", v("support_type")).lowercased())" : "utan support"
+        if v("enable_support") == "1", let sp = run.utskrift[pid]?["stodplast"] ?? run.parts.first(where: { $0.id == pid })?.bambu?.v["stodplast"],
+           !sp.isEmpty, sp.lowercased() != "ingen" { sup += " (kontaktyta i \(sp))" }
         let extra = Utskrift.sortera(run.utskriftOvriga(pid)).map { Utskrift.mening($0.0, $0.1) }
         return "\(v("plast")) · \(v("wall_loops")) väggar · \(v("sparse_infill_density")) infill · \(v("top_shell_layers"))/\(v("bottom_shell_layers")) lager · \(sup)"
             + (extra.isEmpty ? "" : " · " + extra.joined(separator: ", "))
@@ -372,6 +377,21 @@ struct UtskriftKort: View {
                     .tips("Supporttyp")
                 }
             }
+            GridRow {
+                etikett("stodplast")
+                Picker("", selection: Binding(get: { let v = run.utskriftVarde(pid, "stodplast").0; return v.isEmpty || v.lowercased() == "ingen" ? "" : v },
+                                              set: { v in
+                                                  // "Ingen": ta bort appens val; har skriptet en stödplast måste den slås av uttryckligen
+                                                  let skript = run.parts.first { $0.id == pid }?.bambu?.v["stodplast"] ?? ""
+                                                  run.setUtskrift(pid, "stodplast", v.isEmpty ? (skript.isEmpty || skript.lowercased() == "ingen" ? nil : "ingen") : v)
+                                              })) {
+                    Text("Ingen (samma plast)").tag("")
+                    ForEach(stodval, id: \.self) { Text($0).tag($0) }
+                }
+                .labelsHidden().pickerStyle(.menu).frame(width: 170)
+                .disabled(run.utskriftVarde(pid, "enable_support").0 != "1")
+                .tips("Stödets kontaktyta i en annan plast på X2D:s hjälpmunstycke (t.ex. PLA mot PETG-CF – släpper lätt). Kräver support.")
+            }
         }
         .controlSize(.small)
         let ovriga = Utskrift.sortera(run.utskriftOvriga(pid))
@@ -406,6 +426,13 @@ struct UtskriftKort: View {
                     Button("Ta bort \(Utskrift.namn(k))") { run.setUtskrift(pid, k, nil) }
                 }
             }
+    }
+
+    private var stodval: [String] {
+        let v = run.utskriftVarde(pid, "stodplast").0
+        var l = Utskrift.stodplaster.filter { Utskrift.installerade.isEmpty || Utskrift.harProfil($0) }
+        if !v.isEmpty, v.lowercased() != "ingen", !l.contains(v) { l.append(v) }
+        return l.filter { $0.lowercased() != run.plast(pid).lowercased() }
     }
 
     private var typer: [(String, String)] {

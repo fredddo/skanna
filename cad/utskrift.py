@@ -23,6 +23,11 @@ Delar med samma plast delar filamentplats i Bambu Studio, så deras filament-vä
 delar vill ha olika värden på samma nyckel; första delen i ordningen vinner). Värdet sätts i filamentplatsens alla
 munstycksvarianter (de som profilen inte lämnar tomma, "nil"). Skriptet kan sätta samma sak i `bambu={"filament": {…}}`.
 
+Stödplast per del: "stodplast": "PLA" (eller "ingen") – stödets kontaktyta (interface) skrivs i den plasten på X2D:s
+hjälpmunstycke (Bowden, extruder 2), t.ex. PLA mot PETG-CF som släpper lätt. Kräver enable_support 1. Exporten lägger
+till en filamentplats för stödplasten (även om inget objekt skrivs i den), sätter objektets support_interface_filament
+till den platsen och mappar platsen till hjälpmunstycket (filament_map "2", filament_map_mode "Manual").
+
 Nycklarna är Bambu Studios egna processnycklar (som i `prj.del_(…, bambu={…})`) plus "plast". Värden är strängar.
 Gällande värde per del: processprofilen < delens "bambu" i delar.json (skriptet) < utskrift.json. Plast utan värde = PLA
 (eller `--material` till bambu.py).
@@ -97,7 +102,14 @@ def gallande(pid, skript_bambu, fil, standardplast=STANDARDPLAST):
     s = {k: normalisera(k, v) for k, v in (skript_bambu or {}).items() if k != "filament"}
     s.update({k: v for k, v in fil.get(pid, {}).items() if k != "filament"})
     plast = (s.pop("plast", "") or standardplast).strip()
+    s.pop("stodplast", None)
     return plast, s
+
+
+def stodplast_gallande(pid, skript_bambu, fil):
+    """Delens stödplast (interface på hjälpmunstycket), eller None. utskrift.json går före skriptet; "ingen" = ingen."""
+    v = (fil.get(pid, {}).get("stodplast") or (skript_bambu or {}).get("stodplast") or "").strip()
+    return None if v.lower() in ("", "ingen", "none", "0") else v
 
 
 def filament_gallande(pid, skript_bambu, fil):

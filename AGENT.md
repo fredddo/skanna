@@ -240,6 +240,14 @@ som du ändrar när användaren ber om det ("gör locket i PETG-CF med 4 väggar
   **Delar med samma plast delar filamentplats**, så sätt samma värden på dem; vid olika värden vinner första delen i
   ordningen och exporten varnar. Nycklar som inte är filamentinställningar ignoreras med en varning. Appen visar dem som
   `filament.<nyckel>` under "Fler inställningar". Skriptet kan sätta detsamma i `bambu={"filament": {…}}`.
+- **Stödplast (X2D:s hjälpmunstycke):** `"stodplast": "PLA"` per del (eller `cad/utskrift.py <projekt> <del>
+  stodplast=PLA`; `ingen` = av). Stödets kontaktyta (interface) skrivs då i den plasten på hjälpmunstycket (Bowden,
+  extruder 2) – t.ex. PLA mot PETG-CF, som släpper lätt. Kräver `enable_support` `"1"` (annars varnar exporten och
+  hoppar över det). Exporten lägger till en filamentplats för stödplasten, sätter objektets
+  `support_interface_filament` till den och mappar platsen till hjälpmunstycket (`filament_map` "2",
+  `filament_map_mode` "Manual"). Kombinera gärna med `support_top_z_distance 0` och `support_interface_spacing 0`.
+  Mappningen är härledd ur en riktig X2D-export (extruder_type ["Direct Drive", "Bowden"]); att Bambu Studio läser den
+  så är inte provat härifrån – be användaren kontrollera i Studio att stödplatsen står på hjälpmunstycket.
 - **Plast:** `PLA`, `PLA Matte`, `PETG`, `PETG HF`, `PETG-CF`, `ABS`, `ASA`, `PC`, `PA6-CF`, `TPU 95A` … slås upp som
   "Bambu <plast>[ Basic] @BBL X2D 0.4 nozzle" (annars "Generic <plast>"). Saknas en installerad profil används
   basplasten (`PETG-CF2` → PETG) eller PLA, och exporten skriver en varning som appen visar. Plasten står alltid i

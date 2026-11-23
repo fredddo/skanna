@@ -6,6 +6,10 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Stödplast på X2D:s hjälpmunstycke:** under Skriv ut-pilen finns **Stödplast** (Ingen / PLA …). Stödets kontaktyta
+  skrivs då i den plasten på hjälpmunstycket, t.ex. PLA mot PETG-CF som släpper lätt; Bambu-filen får en egen
+  filamentplats för stödet, mappad till hjälpmunstycket. Kräver att support är på. Kontrollera första gången i Bambu
+  Studio att stödplatsen står på hjälpmunstycket (härlett ur en X2D-export, inte provat i Studio härifrån).
 - **Esc i Peka rensar punkterna** – också när chattrutan har fått fokus efter klicket (felklick bort med ett tryck;
   texten du skrivit ligger kvar).
 - **"Claude väntar på ditt svar" öppnar rätt tråd:** klick på raden öppnar tråden där Claude senast skrev (också om den

@@ -68,5 +68,42 @@ class Export(unittest.TestCase):
         self.assertIn(f'key="extruder" value="{i + 1}"', model)
 
 
+class Stodplast(unittest.TestCase):
+    def setUp(self):
+        self.t, self.p = kopia()
+
+    def tearDown(self):
+        stada(self.t)
+
+    def test_pla_stod_under_petg_pa_hjalpmunstycket(self):
+        cad = self.p / "cad"
+        utskrift.skriv(cad, {"lada": {"plast": "PETG", "enable_support": "1", "stodplast": "PLA"},
+                             "lock": {"plast": "PETG"}})
+        (cad / "objekt.json").write_text(json.dumps({"borttagna": ["fotter"]}))
+        ut = bambu.bygg_3mf(self.p, set(), "PLA", self.t / "ut.3mf")
+        z, inst, model = las_3mf(ut)
+        ids = inst["filament_settings_id"]
+        self.assertEqual(len(ids), 2)                                       # PETG (delarna) + PLA (bara stöd)
+        pla = next(i for i, x in enumerate(ids) if "PLA" in x) + 1
+        self.assertEqual(inst["filament_map"][pla - 1], "2")                # hjälpmunstycket
+        self.assertEqual(inst["filament_map"][2 - pla], "1")
+        self.assertEqual(inst["filament_map_mode"], "Manual")
+        self.assertIn(f'key="support_interface_filament" value="{pla}"', model)
+        self.assertEqual(model.count("support_interface_filament"), 1)      # bara lådan har stödplast
+        self.assertIn('key="filament_map_mode" value="Manual"', model)
+        self.assertNotIn('key="stodplast"', model)                          # ingen Bambu-nyckel
+        self.assertNotIn("(PLA)", model)                                    # inget objekt skrivs i PLA
+
+    def test_stodplast_utan_support_eller_samma_plast_ignoreras(self):
+        cad = self.p / "cad"
+        utskrift.skriv(cad, {"lada": {"plast": "PETG", "stodplast": "PLA"},
+                             "lock": {"plast": "PLA", "enable_support": "1", "stodplast": "PLA"}})
+        (cad / "objekt.json").write_text(json.dumps({"borttagna": ["fotter"]}))
+        z, inst, model = las_3mf(bambu.bygg_3mf(self.p, set(), "PLA", self.t / "ut.3mf"))
+        self.assertNotIn("support_interface_filament", model)
+        self.assertEqual(inst["filament_map_mode"], "Auto For Flush")
+        self.assertEqual(inst["filament_map"], ["1", "1"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -329,10 +329,10 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
         val = [d for d in val if (Path(stl_mapp) / f"{d['id']}.stl").exists()]
     if not val:
         raise SystemExit("inga konstruktionsdelar med utskriftsfil att exportera (kör Bygg om först?)")
-    from utskrift import filament_gallande, gallande, las
+    from utskrift import filament_gallande, gallande, las, stodplast_gallande
     utsk = las(cad)
     # plast och objektinställningar per del; en filamentplats per använd profil (i delarnas ordning)
-    inst_per_del, profiler, plats = [], [], []
+    inst_per_del, profiler, plats, stod = [], [], [], []
     fil_per_plats = {}                                  # profil -> {nyckel: (värde, del)}
     for d in val:
         plast, s = gallande(d["id"], d.get("bambu"), utsk, material)
@@ -343,6 +343,11 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
             profiler.append(prof)
         inst_per_del.append((plast, s))
         plats.append(profiler.index(prof) + 1)
+        sp = stodplast_gallande(d["id"], d.get("bambu"), utsk)
+        if sp and s.get("enable_support") != "1":
+            print(f"varning: {d.get('namn') or d['id']}: stödplast {sp} men support är av – ingen stödplast", file=sys.stderr)
+            sp = None
+        stod.append(sp)
         f = fil_per_plats.setdefault(prof, {})
         for k, v in filament_gallande(d["id"], d.get("bambu"), utsk).items():
             if k in f and f[k][0] != v:
@@ -350,7 +355,34 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
                       f"(samma plats, {plast}) – {f[k][0]} används", file=sys.stderr)
                 continue
             f.setdefault(k, (v, d.get("namn") or d["id"]))
+    # stödplast: egen filamentplats (efter delarnas plaster) på hjälpmunstycket; objektets interface skrivs i den
+    huvud = len(profiler)
+    stodplats = []
+    for d, sp in zip(val, stod):
+        if not sp:
+            stodplats.append(None); continue
+        sprof, varn = profil_for(sp)
+        if varn:
+            print(f"varning: stödplast för {d.get('namn') or d['id']}: {varn}", file=sys.stderr)
+        if sprof == profiler[plats[len(stodplats)] - 1]:
+            print(f"varning: {d.get('namn') or d['id']}: stödplasten är samma som delens plast – ingen egen stödplats",
+                  file=sys.stderr)
+            stodplats.append(None); continue
+        if sprof not in profiler:
+            profiler.append(sprof)
+        stodplats.append(profiler.index(sprof) + 1)
+    # extruder per filamentplats: 1 = huvudmunstycket (direktdrift), 2 = hjälpmunstycket (Bowden) – som X2D-exportens
+    # extruder_type ["Direct Drive", "Bowden"] / printer_extruder_id. Platser som bara används som stödplast → 2.
+    objektplatser = set(plats)
+    extruder = ["2" if (i + 1) not in objektplatser and (i + 1) in stodplats else "1" for i in range(len(profiler))]
+    mapmode = "Manual" if "2" in extruder else "Auto For Flush"
+    if "2" in extruder:
+        print("stödplast på hjälpmunstycket: " + ", ".join(f"{_kort(p)} (plats {i + 1})" for i, p in enumerate(profiler)
+                                                           if extruder[i] == "2"), file=sys.stderr)
     komb = kombinera(profiler)
+    if len(profiler) > huvud or "2" in extruder:
+        komb["filament_map"] = extruder
+        komb["filament_map_mode"] = mapmode
     for i, prof in enumerate(profiler):
         varden = {k: v for k, (v, _) in fil_per_plats.get(prof, {}).items()}
         if varden:
@@ -378,7 +410,9 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
 
     # 3dmodel.model: varje del = wrapper-objekt (id 2i) med en komponent (mesh-objekt id 2i-1 i egen fil)
     res, build, rels, cfg_obj, cfg_plat, filer = [], [], [], [], {}, {}
-    for i, ((d, m, lo, hi), (pl, px, py), (plast, s), fp) in enumerate(zip(meshar, pos, inst_per_del, plats), start=1):
+    for i, ((d, m, lo, hi), (pl, px, py), (plast, s), fp, stp) in enumerate(zip(meshar, pos, inst_per_del, plats, stodplats), start=1):
+        if stp:
+            s = {**s, "support_interface_filament": str(stp)}
         ox, oy = plattorigo(pl, nplattor)
         mid, wid = 2 * i - 1, 2 * i
         namn = f'{d.get("namn") or d["id"]}{namn_tillagg} ({plast})'          # plasten i namnet, så att delarna inte blandas ihop
@@ -422,8 +456,8 @@ def bygg_3mf(projekt, delar_ids, material, ut, stl_mapp=None, namn_tillagg=""):
                      '  <plate>\n    <metadata key="plater_id" value="%d"/>\n' % (pl + 1)
                      + f'    <metadata key="plater_name" value={quoteattr(prj.name if nplattor == 1 else f"{prj.name} {pl + 1}")}/>\n'
                      '    <metadata key="locked" value="false"/>\n'
-                     '    <metadata key="filament_map_mode" value="Auto For Flush"/>\n'
-                     f'    <metadata key="filament_maps" value="{" ".join(["1"] * len(profiler))}"/>\n'
+                     f'    <metadata key="filament_map_mode" value="{mapmode}"/>\n'
+                     f'    <metadata key="filament_maps" value="{" ".join(extruder)}"/>\n'
                      f'    <metadata key="filament_volume_maps" value="{" ".join(["0"] * len(profiler))}"/>\n'
                      + "".join(cfg_plat[pl]) + '  </plate>\n' for pl in sorted(cfg_plat))
                  + '</config>\n')

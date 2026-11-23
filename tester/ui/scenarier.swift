@@ -143,6 +143,11 @@ enum Scenarier {
                 kolla(Utskrift.mening("filament.nozzle_temperature", "240") == "munstycke 240 °C", "löptexten för temperatur")
                 kolla(Utskrift.mening("reduce_crossing_wall", "1") == "undvik att korsa väggar: på", "löptexten för på/av")
             },
+            .gor {
+                run.setUtskrift("lock", "stodplast", "PLA")
+                kolla(run.utskrift["lock"]?["stodplast"] == "PLA", "stödplasten ska sparas")
+                kolla(!run.utskriftOvriga("lock").contains { $0.0 == "stodplast" }, "stödplasten har en egen rad, inte bland tilläggen")
+            },
             .vanta(1.0), .gor { run.undo() }, .vanta(0.5), .gor {
                 kolla(run.utskrift["lock"] == nil, "ångra ska ta bort lockets ändringar, är \(run.utskrift["lock"] ?? [:])")
             },
