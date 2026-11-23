@@ -245,6 +245,14 @@ struct Workspace: View {
                 return e
             }
             if e.type == .keyUp { return e }
+            // Esc i Peka: rensa punkterna (felklick) – också när chattrutan har fokus efter klicket; texten du skrivit
+            // ligger kvar
+            if run.screen == .projekt, e.keyCode == 53, run.tool == .peka, !run.pekpunkter.isEmpty,
+               (e.window ?? NSApp.keyWindow)?.attachedSheet == nil {
+                run.pekpunkter = []; run.traff = nil; run.info = nil
+                run.toast = "Punkterna rensade"
+                return nil
+            }
             // ⇥: släck/tänd alla paneler; Esc tänder dem igen
             if run.screen == .projekt, e.keyCode == 48, e.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
                !(NSApp.keyWindow?.firstResponder is NSTextView), NSApp.keyWindow?.attachedSheet == nil {
@@ -253,8 +261,9 @@ struct Workspace: View {
             if run.screen == .projekt, e.keyCode == 53, run.dolPaneler, NSApp.keyWindow?.attachedSheet == nil {
                 run.dolPaneler = false; return nil
             }
+            let fonster = e.window ?? NSApp.keyWindow
             guard run.screen == .projekt, e.modifierFlags.intersection([.command, .control, .option]).isEmpty,
-                  !(NSApp.keyWindow?.firstResponder is NSTextView), NSApp.keyWindow?.attachedSheet == nil,
+                  !(fonster?.firstResponder is NSTextView), fonster?.attachedSheet == nil,
                   let c = e.charactersIgnoringModifiers?.lowercased() else { return e }
             switch c {
             case "v": run.tool = .valj

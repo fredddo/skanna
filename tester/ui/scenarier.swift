@@ -175,6 +175,21 @@ enum Scenarier {
             run.tool = .valj
         }]),
 
+        s("Esc rensar Peka-punkter även med fokus i chattrutan", [
+            .gor {
+                win.makeKey(); run.tool = .peka
+                run.pekaKlick(Runner.PickPoint(pos: [1, 2, 3], target: "lada"))
+                run.pekaKlick(Runner.PickPoint(pos: [20, 2, 3], target: "lada"))
+            }, .vanta(0.5), .gor {
+                kolla(win.firstResponder is NSTextView, "chattrutan ska ha fokus efter klicket")
+                kolla(run.pekpunkter.count == 2, "två punkter ska finnas")
+                tangent(true, tecken: "\u{1b}", kod: 53)
+            }, .vanta(0.2), .gor {
+                kolla(run.pekpunkter.isEmpty, "Esc ska rensa punkterna, \(run.pekpunkter.count) kvar")
+                run.tool = .valj
+            },
+        ]),
+
         s("Håll mellanslag = prata", [
             .gor { win.makeKey(); run.tool = .rita; tangent(true, tecken: " ", kod: 49) }, .vanta(0.2),
             .gor { kolla(run.mikHall, "mellanslag nere i Rita ska starta mikrofonen") },

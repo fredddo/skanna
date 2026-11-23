@@ -6,6 +6,8 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Esc i Peka rensar punkterna** – också när chattrutan har fått fokus efter klicket (felklick bort med ett tryck;
+  texten du skrivit ligger kvar).
 - **"Claude väntar på ditt svar" öppnar rätt tråd:** klick på raden öppnar tråden där Claude senast skrev (också om den
   låg i Historik), scrollar fram den och sätter markören i trådens svarsfält. När du svarat följer tråden vanliga regler.
 - **Testsvit:** `tester/testa.sh` kör alla tester – skript, kompilering, Python-tester för utskrift/export och 14
