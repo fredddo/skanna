@@ -268,3 +268,10 @@ Projektets `.gitignore` håller bilder, video och mesh utanför (och i projekt m
 Commit-rubriken tas från första raden i ditt senaste meddelande i `claude.json` – skriv den som en kort sammanfattning av ändringen.
 Committa, pusha eller skriv om historiken inte själv. Går användaren tillbaka till en tidigare version får du ett `svar.json`-meddelande
 ("Historik"): filerna i `cad/` (utom samtalet) är då som i den versionen – läs om skripten innan du fortsätter.
+
+## Tester (`tester/testa.sh`)
+Hela testsviten: skripten, kompilering av appen, testprojektet `tester/fixtur/Testlåda` (byggs ur sina del-skript),
+Python-tester för `cad/` (`tester/python`) och UI-scenarier där appen körs osynligt (`tester/ui/scenarier.swift`).
+`bygg-beta.sh` bygger bara om Skanna Beta när allt går igenom. Ändrar du något i `cad/*.py` (utskrift, export, ytor,
+projekt): kör `tester/testa.sh` och lägg gärna till ett test i `tester/python`.
+

@@ -12,6 +12,13 @@ if [[ "$1" == "--test" ]]; then
   ENV="<key>LSEnvironment</key><dict><key>SKANNA_PROJEKTROT</key><string>$HOME/Downloads/skanna-test/kopia</string></dict>"
   mkdir -p "$HEM/test"
 fi
+# Den riktiga Beta byggs bara om när hela testsviten går igenom (tester/testa.sh); --utan-test hoppar över det.
+if [[ -z "$ENV" && "${1:-}" != "--utan-test" ]]; then
+  if ! tester/testa.sh; then
+    echo "Testerna gick inte igenom – Skanna Beta byggs inte om (rätta felen, eller: bygg-beta.sh --utan-test)." >&2
+    exit 1
+  fi
+fi
 if [[ -z "$ENV" ]] && pgrep -f "Skanna Beta.app/Contents/MacOS/skanna-cli" >/dev/null; then
   echo "En skanning pågår i Skanna Beta – bygger inte om nu." >&2
   exit 1

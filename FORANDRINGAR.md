@@ -6,6 +6,11 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Testsvit:** `tester/testa.sh` kör alla tester – skript, kompilering, Python-tester för utskrift/export och 14
+  UI-scenarier (vridning, raka vyer, Z, sprängvy, Radera/ångra, utskriftsinställningar, byt namn, historikfliken, Peka,
+  håll mellanslag, chatten, ombygge när ett mått ändras …) där appen körs osynligt på ett eget testprojekt. Tar ca 1,5
+  minut. **Skanna Beta byggs bara om när alla tester går igenom.** Testerna hittade direkt ett fel i exporten
+  (filamentvärden kunde hamna i en maskininställning när projektet hade två plaster) – rättat.
 - **Raka vyer är ortografiska:** klick på kubens sidor (och ⌘1–⌘6) ger en vy utan perspektiv – en sidovy är helt platt.
   En lapp under kuben säger "Från +X · ortografisk"; vrider du blir det perspektiv igen och lappen försvinner.
 - **Kuben följer modellen igen:** den kunde stå kvar i en gammal vy medan modellen vreds.

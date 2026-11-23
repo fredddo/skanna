@@ -9,3 +9,5 @@ __pycache__/
 .DS_Store
 # testinstansen (bygg-beta.sh --test)
 /test/
+# testsvitens byggen (tester/testa.sh)
+/tester/.bygg/

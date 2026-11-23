@@ -197,12 +197,15 @@ def satt_filament(inst, plats, varden, n):
     """Skriv filament-värden i filamentplats `plats` (0-baserad av n). Per-filament-nycklar har n lika långa block;
     i blocket ersätts varianterna som inte är "nil" (alla, om alla är "nil"). Returnerar nycklarna som inte gick."""
     ref = json.loads(SKELETT.read_text())
+    # per filamentplats = skelettets lista (två filament) är dubbelt så lång som i en enplatsmall (samma regel som
+    # kombinera). Längden i den sammanslagna listan räcker inte: med två plaster ser t.ex. maskinens
+    # retraction_length (en per munstycksvariant) ut som en filamentnyckel.
+    en = mall_for(inst["filament_settings_id"][0])
     ok, fel = [], []
     for k, v in varden.items():
         lst = inst.get(k)
-        # per filamentplats = skelettets lista (två filament) är dubbelt så lång som en plats i mallen
-        per_fil = isinstance(lst, list) and lst and len(lst) % n == 0 and isinstance(ref.get(k), list) \
-            and len(ref[k]) == 2 * (len(lst) // n)
+        per_fil = isinstance(lst, list) and lst and isinstance(en.get(k), list) and isinstance(ref.get(k), list) \
+            and len(ref[k]) == 2 * len(en[k]) and len(lst) == n * len(en[k])
         if not per_fil:
             fel.append(k)
             continue
