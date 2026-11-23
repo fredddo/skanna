@@ -4,7 +4,7 @@ Appen (Lägg till del → Importera fil …) kopierar filen till <projekt>/cad/i
 cad/skript/50-import-<id>.py som anropar `importera(...)` här. Då byggs, versioneras och exporteras delen som alla
 andra delar, och placeringen kan ändras som vanliga mått i appen ("<namn>: flytta x" osv.).
 
-- STEP (.step/.stp): riktiga ytor och kanter (B-rep). Ytor/kanter går att välja, mäta och kantbehandla (fillet/fas),
+- STEP (.step/.stp): riktiga ytor och kanter (B-rep). Kropparna får namnen ur filen (Fusions kropps-/komponentnamn). Ytor/kanter går att välja, mäta och kantbehandla (fillet/fas),
   och ett annat del-skript kan bygga vidare på soliden med `las_step(prj, "import/fil.step")`.
   Fusions parametrar följer inte med i STEP; vill man ha redigerbara mått skrivs delen om som ett eget skript.
 - STL/3MF/OBJ: bara trianglar. Plana ytor plockas ut så att de går att välja och mäta mot; resten blir en yta
@@ -58,6 +58,109 @@ def las_step(prj, fil):
     return import_step(str(prj.cad / fil))
 
 
+def las_step_med_namn(fil):
+    """Läs en STEP-fil med kropparnas namn (t.ex. från Fusion). Returnerar (Compound, namn per kropp i
+    .solids()-ordning). Namnet är kroppens eget (MANIFOLD_SOLID_BREP) om det finns, annars komponentens
+    (NEXT_ASSEMBLY_USAGE_OCCURRENCE / PRODUCT); None om inget av dem finns eller bara är en Fusion-tidsstämpel."""
+    import re
+    from build123d import Compound
+    from OCP.Interface import Interface_Static
+    from OCP.STEPCAFControl import STEPCAFControl_Reader
+    from OCP.TDocStd import TDocStd_Document
+    from OCP.TCollection import TCollection_ExtendedString, TCollection_AsciiString
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool
+    from OCP.TDF import TDF_Label
+    from OCP.collections import Sequence_TDF_Label
+    from OCP.TDataStd import TDataStd_Name
+    from OCP.TopAbs import TopAbs_SOLID
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopLoc import TopLoc_Location
+
+    doc = TDocStd_Document(TCollection_ExtendedString("XCAF"))
+    st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
+    r = STEPCAFControl_Reader()
+    Interface_Static.SetIVal_s("read.stepcaf.subshapes.name", 1)   # kroppsnamn i en komponent → egna etiketter
+    r.SetNameMode(True)
+    if r.ReadFile(str(fil)) != 1 or not r.Transfer(doc):
+        raise SystemExit(f"Kunde inte läsa {Path(fil).name}")
+
+    def namn(l):
+        a = TDataStd_Name()
+        if l.IsAttribute(TDataStd_Name.GetID_s()) and l.FindAttribute(TDataStd_Name.GetID_s(), a):
+            n = TCollection_AsciiString(a.Get()).ToCString().strip()
+            if n and not re.fullmatch(r"[\d\-_ .:]+", n) and n.upper() not in ("SOLID", "COMPOUND", "OPEN CASCADE STEP TRANSLATOR"):
+                return n
+        return None
+
+    egna = {}                               # TShape → kroppens eget namn
+    alla = Sequence_TDF_Label()
+    st.GetShapes(alla)
+    for i in range(1, alla.Length() + 1):
+        sub = Sequence_TDF_Label()
+        st.GetSubShapes_s(alla.Value(i), sub)
+        for j in range(1, sub.Length() + 1):
+            sh = st.GetShape_s(sub.Value(j))
+            if sh.ShapeType() == TopAbs_SOLID and namn(sub.Value(j)):
+                egna[hash(sh.TShape())] = namn(sub.Value(j))
+
+    delar, namnen = [], []
+
+    def gå(l, loc, komp):
+        ref = l
+        if st.IsReference_s(l):
+            ref = TDF_Label()
+            st.GetReferredShape_s(l, ref)
+        L = loc.Multiplied(st.GetLocation_s(l))
+        k = namn(ref) or namn(l) or komp
+        if st.IsAssembly_s(ref):
+            sub = Sequence_TDF_Label()
+            st.GetComponents_s(ref, sub)
+            for i in range(1, sub.Length() + 1):
+                gå(sub.Value(i), L, k)
+            return
+        sh = st.GetShape_s(ref)
+        sub = Sequence_TDF_Label()
+        st.GetSubShapes_s(ref, sub)
+        under = [(st.GetShape_s(sub.Value(j)), namn(sub.Value(j))) for j in range(1, sub.Length() + 1)]
+        under = [(u, n) for u, n in under if n and u.ShapeType() == TopAbs_SOLID]
+        e = TopExp_Explorer(sh, TopAbs_SOLID)
+        hittade = False
+        while e.More():
+            s = e.Current()
+            hittade = True
+            delar.append(s.Moved(L))
+            eget = next((n for u, n in under if u.IsPartner(s)), None) or egna.get(hash(s.TShape()))
+            namnen.append(eget or k)
+            e.Next()
+        if not hittade and not sh.IsNull():
+            delar.append(sh.Moved(L))      # ytor/skal utan kropp: med i formen, men ingen kropp att namnge
+
+    fria = Sequence_TDF_Label()
+    st.GetFreeShapes(fria)
+    for i in range(1, fria.Length() + 1):
+        gå(fria.Value(i), TopLoc_Location(), None)
+    from OCP.BRep import BRep_Builder
+    from OCP.TopoDS import TopoDS_Compound
+    tc, b = TopoDS_Compound(), BRep_Builder()
+    b.MakeCompound(tc)
+    for d in delar:
+        b.Add(tc, d)
+    c = Compound(tc)
+    if len(c.solids()) != len(namnen):
+        return c, None
+    # Samma namn flera gånger (t.ex. tre likadana fjäderpaket): numrera, så att lagren går att skilja åt
+    antal, sedda = {}, {}
+    for n in namnen:
+        antal[n] = antal.get(n, 0) + 1
+    ut = []
+    for n in namnen:
+        if n and antal[n] > 1:
+            sedda[n] = sedda.get(n, 0) + 1
+            n = f"{n} ({sedda[n]})"
+        ut.append(n)
+    return c, ut
+
+
 def importera(prj, pid, namn, fil, roll="design", farg="#8E8E93", beskrivning=None, utskrift=True):
     """Bygg en importerad del ur cad/<fil> (STEP eller mesh). Skriver mått, ytor, export och delar.json."""
     src = prj.cad / fil
@@ -78,7 +181,11 @@ def importera(prj, pid, namn, fil, roll="design", farg="#8E8E93", beskrivning=No
 # ---- STEP --------------------------------------------------------------------------------------------------------
 def _step(prj, pid, namn, src, P, roll, farg, text, utskrift):
     from build123d import Axis, Location
-    s = las_step(prj, src.relative_to(prj.cad))
+    try:
+        s, kropp_namn = las_step_med_namn(src)
+    except Exception as e:                  # reserv: build123d:s läsare (utan kroppsnamn)
+        print(f"Varning: kroppsnamnen gick inte att läsa ({e}) – kropparna heter Kropp 1, 2 …", flush=True)
+        s, kropp_namn = las_step(prj, src.relative_to(prj.cad)), None
     if abs(P["skala"] - 1) > 1e-9:
         s = s.scale(P["skala"])
     for ax, axis in (("x", Axis.X), ("y", Axis.Y), ("z", Axis.Z)):
@@ -91,7 +198,10 @@ def _step(prj, pid, namn, src, P, roll, farg, text, utskrift):
     bb = s.bounding_box()
     print(f"{src.name}: {len(s.solids())} kroppar, {len(s.faces())} ytor, "
           f"{bb.size.X:.1f} × {bb.size.Y:.1f} × {bb.size.Z:.1f} mm")
-    prj.del_(pid, namn, s, roll=roll, farg=farg, beskrivning=text, utskrift=utskrift and bool(s.solids()))
+    if kropp_namn:
+        print(f"{sum(1 for n in kropp_namn if n)} av {len(kropp_namn)} kroppar har namn från filen", flush=True)
+    prj.del_(pid, namn, s, roll=roll, farg=farg, beskrivning=text, utskrift=utskrift and bool(s.solids()),
+             kropp_namn=kropp_namn)
 
 
 # ---- STL / 3MF / OBJ ---------------------------------------------------------------------------------------------

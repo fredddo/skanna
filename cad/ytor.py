@@ -69,14 +69,18 @@ def _tessellera(f, tolerance, angular):
     return [], []
 
 
-def export_faces(solid, path: Path, tolerance=0.02, angular=0.15):
+def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=None):
+    """kropp_namn: valfri lista med namn per kropp (i solid.solids()-ordning), t.ex. Fusion-namnen ur en STEP."""
     faces = list(solid.faces())
     fidx = {hash(f): i for i, f in enumerate(faces)}
     kropp_av = {}
     kroppar = []
-    for k, s in enumerate(solid.solids()):
+    solider = list(solid.solids())
+    if kropp_namn is not None and len(kropp_namn) != len(solider):
+        kropp_namn = None                      # t.ex. kantbehandling har ändrat kropparna – namnen går inte att lita på
+    for k, s in enumerate(solider):
         bb = s.bounding_box()
-        kroppar.append({"id": k, "namn": f"Kropp {k + 1}", "volym": round(s.volume, 2),
+        kroppar.append({"id": k, "namn": (kropp_namn and kropp_namn[k]) or f"Kropp {k + 1}", "volym": round(s.volume, 2),
                         "min": [round(bb.min.X, 3), round(bb.min.Y, 3), round(bb.min.Z, 3)],
                         "max": [round(bb.max.X, 3), round(bb.max.Y, 3), round(bb.max.Z, 3)]})
         for f in s.faces():

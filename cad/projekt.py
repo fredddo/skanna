@@ -164,7 +164,7 @@ class Projekt:
         return None
 
     def del_(self, pid, namn, solid, roll="design", farg="#2E7DD7", beskrivning=None, utskrift=True,
-             utskrift_solid=None, bambu=None):
+             utskrift_solid=None, bambu=None, kropp_namn=None):
         """Exportera en del: <id>.step, <id>-ytor.json (appens 3D-vy), och om utskrift: <id>.3mf/.stl i utskriftsläge
         (lägsta z på plattan, centrerad).
 
@@ -181,7 +181,7 @@ class Projekt:
         solid = self._kantbehandla(pid, solid)
         if not snabb:
             export_step(solid, str(self.cad / f"{pid}.step"))
-        n = export_faces(solid, self.cad / f"{pid}-ytor.json")
+        n = export_faces(solid, self.cad / f"{pid}-ytor.json", kropp_namn=kropp_namn)
         export = f"{pid}.3mf" if (utskrift and snabb) else None
         if utskrift and not snabb:
             if utskrift_solid is None:
