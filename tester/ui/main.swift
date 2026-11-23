@@ -35,7 +35,8 @@ func oppnaKopia(_ namn: String) -> URL {
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let p = dir.appendingPathComponent("Testlåda")
     try! FileManager.default.copyItem(at: FIXTUR, to: p)
-    run.selectedPart = nil; run.explode = 0; run.utfallda = []; run.hidden = []
+    run.selectedPart = nil; run.explode = 0; run.utfallda = []; run.hidden = []; run.tool = .valj
+    win.makeFirstResponder(nil)                 // inget textfält har fokus från förra scenariot
     run.select(p)
     return p
 }
