@@ -16,6 +16,11 @@ enum Scenarier {
     }
     static func s(_ namn: String, _ steg: [Steg]) -> Scenario { Scenario(namn: namn, steg: oppna(namn) + steg) }
 
+    /// Tiden (trådens id) för användarmeddelandet med texten.
+    static func tidFor(_ p: URL, _ text: String) -> String? {
+        ((json(p.appendingPathComponent("cad/svar.json"))["svar"] as? [[String: Any]]) ?? []).first { $0["svar"] as? String == text }?["tid"] as? String
+    }
+
     static func alla() -> [Scenario] { [
         s("Öppna projekt", [.gor {
             kolla(Set(run.parts.map(\.id)) == ["lada", "lock", "insats", "fotter"], "delarna: \(run.parts.map(\.id))")
@@ -189,6 +194,36 @@ enum Scenarier {
         }, .vanta(0.5), .gor {
             let t = run.chatThreads(closedLocal: []).threads
             kolla(t.count == 1 && t.first?.status == .vantar, "meddelandet ska stå som Väntar på Claude: \(t.map { "\($0.title) \($0.status)" })")
+        }]),
+
+        s("Claude väntar på svar öppnar rätt tråd med fokus", [.gor {
+            UserDefaults.standard.set(0, forKey: "hogerflik")
+            let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]
+            let t1 = f.string(from: Date().addingTimeInterval(-900)), t2 = f.string(from: Date().addingTimeInterval(-800))
+            let t3 = f.string(from: Date().addingTimeInterval(-700)), t4 = f.string(from: Date().addingTimeInterval(-600))
+            let cad = projekt.appendingPathComponent("cad")
+            try? JSONSerialization.data(withJSONObject: ["svar": [
+                ["fraga_id": "meddelande", "fraga": "", "svar": "Gör locket tjockare", "tid": t1],
+                ["fraga_id": "meddelande", "fraga": "", "svar": "Var ska kontakten sitta?", "tid": t3]]])
+                .write(to: cad.appendingPathComponent("svar.json"))
+            try? JSONSerialization.data(withJSONObject: ["status": "fraga", "status_text": "Väntar på dig", "mottaget": t4, "meddelanden": [
+                ["tid": t2, "text": "Klart, 3 mm.", "svar_pa": t1],
+                ["tid": t4, "text": "Vilken sida vill du ha kontakten på?", "svar_pa": t3]]])
+                .write(to: cad.appendingPathComponent("claude.json"))
+            run.loadAnswers(); run.reloadCad()
+        }, .vanta(0.5), .gor {
+            win.makeKey()
+            let id = run.oppnaClaudesTrad()
+            kolla(id == Scenarier.tidFor(projekt, "Var ska kontakten sitta?"), "tråden där Claude senast skrev ska öppnas, fick \(id ?? "-")")
+            let th = run.chatThreads(closedLocal: []).threads.first { $0.id == id }
+            kolla(th?.status == .fraga, "den öppnade tråden ska visas som aktiv fråga, är \(String(describing: th?.status))")
+        }, .vanta(0.8), .gor {
+            kolla(win.firstResponder is NSTextView, "trådens svarsfält ska ha fokus, har \(String(describing: win.firstResponder))")
+            kolla(!run.fokusTradVantar, "fokusbegäran ska vara förbrukad")
+            if let th = run.chatThreads(closedLocal: []).threads.first(where: { $0.id == run.fokusTrad }) {
+                run.chatSend(thread: th, text: "Vänster sida")
+            }
+            kolla(run.fokusTrad == nil, "när du svarat ska tråden följa vanliga regler igen")
         }]),
 
         s("Ändrat mått byggs om", [

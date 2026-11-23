@@ -58,6 +58,9 @@ final class Runner: ObservableObject {
     var utskriftTimer: Timer?
     @Published var hidden: Set<String> = [] { didSet { if hidden != oldValue { noteChange("Visa/dölj"); saveObjektVisning() } } }
     @Published var objektOrdning: [String] = []          // användarens ordning i objektträdet (cad/objekt.json)
+    @Published var fokusTrad: String?                   // tråden som "Claude väntar på ditt svar" öppnade (visas som aktiv tills du svarat)
+    var fokusTradVantar = false                          // trådens svarsfält ska få fokus när tråden visas
+    @Published var fokusTradTick = 0
     @Published var ortoVy: String?                      // rak vy med ortografisk projektion (lappen vid vykuben)
     @Published var utfallda: Set<String> = []           // delar vars kroppar är utfällda i objektträdet (sprängs då var för sig)
     @Published var borttagna: Set<String> = []          // raderade delar (cad/objekt.json)
@@ -193,7 +196,7 @@ final class Runner: ObservableObject {
         undoPaused = true
         defer { resetUndo() }
         let ov = loadObjektVisning()
-        objektOrdning = ov.ordning; egnaNamn = ov.namn; borttagna = Set(ov.borttagna ?? [])
+        objektOrdning = ov.ordning; egnaNamn = ov.namn; borttagna = Set(ov.borttagna ?? []); fokusTrad = nil
         hidden = Set(ov.dolda); pick = nil; ritning = nil; visadRitning = nil; mellanslag = false; focusQuestion = nil; snapped = nil; note = nil; buildError = nil; buildLog = ""
         selectedPart = nil; sectionOn = false; sectionLabel = nil; sectionCoord = nil
         traff = nil; info = nil; matning = nil; explode = 0; offsets = [:]; sprangOffsets = [:]; spelar = false; underObjekt = [:]

@@ -139,6 +139,7 @@ extension Runner {
             if title.isEmpty { title = first?.fraga ?? "Tråd" }
             title = String(title.split(separator: "\n").first ?? "").trimmingCharacters(in: .whitespaces)
             if title.count > 48 { title = String(title.prefix(46)) + "…" }
+            if key == fokusTrad, status == .klar, !closedByUser { status = .fraga }   // öppnad från "Claude väntar på ditt svar"
             out.append(ChatThread(id: key, isQuestion: isQ, title: title, status: status, entries: entries, plats: plats, kant: kant,
                                   markering: !(q?.markering ?? []).isEmpty, closedByUser: closedByUser,
                                   lastTid: rest.last?.tid ?? ""))
@@ -147,7 +148,7 @@ extension Runner {
         for m in pending {
             var t = String(m.text.split(separator: "\n").first ?? "").trimmingCharacters(in: .whitespaces)
             if t.count > 48 { t = String(t.prefix(46)) + "…" }
-            out.append(ChatThread(id: "claude-" + m.tid, isQuestion: false, title: t, status: .klar,
+            out.append(ChatThread(id: "claude-" + m.tid, isQuestion: false, title: t, status: "claude-" + m.tid == fokusTrad ? .fraga : .klar,
                                   entries: [ChatEntry(id: "c" + m.tid, tid: m.tid, fromClaude: true, isQuestion: false, text: m.text, svar: nil)],
                                   plats: nil, kant: nil, markering: false, closedByUser: false, lastTid: m.tid))
         }
@@ -191,11 +192,27 @@ extension Runner {
         return (pp, t.kant, text)
     }
 
+    /// "Claude väntar på ditt svar": öppna tråden där Claude senast skrev (även en avslutad) som aktiv tråd, scrolla dit
+    /// och ge dess svarsfält fokus. Finns ingen sådan tråd: fokus i fältet för en ny tråd. Returnerar trådens id.
+    @discardableResult
+    func oppnaClaudesTrad() -> String? {
+        let alla = chatThreads(closedLocal: loadClosedThreads()).threads
+        let senast = alla.compactMap { th in th.entries.filter(\.fromClaude).map(\.tid).filter { !$0.isEmpty }.max().map { (th, $0) } }
+            .max { $0.1 < $1.1 }?.0
+        guard let th = senast else { skrivFokus += 1; return nil }
+        if th.closedByUser { setThreadClosed(th.id, false) }
+        fokusTrad = th.id
+        fokusTradVantar = true
+        fokusTradTick += 1
+        return th.id
+    }
+
     /// Samma funktion som skicka-knapparna anropar. thread = nil startar en ny tråd.
     func chatSend(thread: ChatThread?, text: String, attachment: URL? = nil, anchor: (point: PickPoint, kant: Int?, text: String)? = nil) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty || attachment != nil || (thread == nil && ritning != nil) else { return }
         if let th = thread {
+            if th.id == fokusTrad { fokusTrad = nil }        // svarat: tråden följer de vanliga reglerna igen
             let fler = anchor != nil && anchor?.point == pick ? Array(pekpunkter.dropFirst()) : []
             if th.isQuestion {
                 send(questionID: th.id, question: th.title, text: t, attachment: attachment, plats: anchor?.point, kant: anchor?.kant, fler: fler)
@@ -278,11 +295,13 @@ struct ChattPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             statusLine(active)
             // Allt i en rullning: aktiva trådar överst (hela texten), historiken under. Inga dolda höjdgränser.
+            ScrollViewReader { rull in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     if data.threads.isEmpty && data.log.isEmpty { emptyState }
                     ForEach(active) { th in
                         ChattTrad(run: run, thread: th, finished: false, onClose: { close(th) }, onReopen: {})
+                            .id(th.id)
                             .transition(.opacity)
                     }
                     if !done.isEmpty { historik(done) }
@@ -290,6 +309,11 @@ struct ChattPanel: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.trailing, 2)
+            }
+            .onChange(of: run.fokusTradTick) { _, _ in
+                // tråden som öppnades från "Claude väntar på ditt svar" fram i rullningen
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { if let id = run.fokusTrad { withAnimation { rull.scrollTo(id, anchor: .top) } } }
+            }
             }
             ChattSkrivfalt(run: run)
         }
@@ -332,6 +356,11 @@ struct ChattPanel: View {
         guard let forsta = o.first, let t = f.date(from: forsta.lastTid), Date().timeIntervalSince(t) > 180 else { return [] }
         return o
     }
+    private func oppnaClaudesTrad(_ active: [ChatThread]) {
+        run.oppnaClaudesTrad()
+        closedLocal = run.loadClosedThreads()
+    }
+
     private func paminnelse(_ o: [ChatThread]) -> String {
         let lista = o.map { "• \(chattTid($0.lastTid)): \($0.title)" }.joined(separator: "\n")
         return """
@@ -361,7 +390,7 @@ struct ChattPanel: View {
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12)))
                 .tips("Claude körs i en egen chatt (Claude Code) och ser bara nya meddelanden när den bevakar projektet. Appen kan inte väcka den – klistra in påminnelsen där.")
             } else if fragaUtanTrad {
-                Button { run.skrivFokus += 1 } label: {
+                Button { oppnaClaudesTrad(active) } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "questionmark.circle.fill").foregroundStyle(.orange).font(.caption)
                         Text("Claude väntar på ditt svar: \(run.claude?.status_text ?? "")").font(.caption).foregroundStyle(.secondary).lineLimit(2)
@@ -374,7 +403,7 @@ struct ChattPanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .tips("Claude frågar utan att frågan hör till en tråd. Klicka och skriv ditt svar i rutan längst ner – det blir en ny tråd som Claude läser.")
+                .tips("Claude väntar på ditt svar. Klicka så öppnas tråden där Claude senast skrev, med markören i svarsfältet.")
             } else if run.claude == nil {
                 Button { run.copyClaudeText() } label: { Label("Kopiera uppdrag till Claude", systemImage: "doc.on.clipboard") }
                     .tips("Klistra in i chatten med Claude (Claude Code). Claude läser då AGENT.md och svarar här i appen.")
@@ -508,8 +537,20 @@ struct ChattTrad: View {
             }
         }
         .padding(8)
+        .onAppear { fokuseraOmBegart() }
+        .onChange(of: run.fokusTradTick) { _, _ in fokuseraOmBegart() }
         .background(RoundedRectangle(cornerRadius: 8).fill(finished ? Color.secondary.opacity(0.05) : color.opacity(0.07)))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.red : (finished ? Color.secondary.opacity(0.15) : color.opacity(0.35)), lineWidth: selected ? 1.5 : 1))
+    }
+
+    /// Öppnad från "Claude väntar på ditt svar": fäll ut och ge svarsfältet fokus.
+    private func fokuseraOmBegart() {
+        guard !finished, run.fokusTrad == thread.id, run.fokusTradVantar else { return }
+        DispatchQueue.main.async {
+            run.fokusTradVantar = false
+            expanded = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focused = true }
+        }
     }
 
     /// Aktiv och hopfälld: de två senaste meddelandena i sin helhet (frågetexten följer alltid med). Utfälld: alla.
