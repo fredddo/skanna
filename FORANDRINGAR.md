@@ -6,6 +6,8 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Objektpanelens bredd går att ändra:** dra i panelens högerkant (200–640 punkter, sparas); dubbelklicka på kanten
+  för standardbredd.
 - **Komponentträd för importerad STEP:** kropparna visas under sina komponenter som i Fusion (t.ex. fjäderpaket →
   Variant B → Tallriksfjädrar → Tallrik 1–11). Varje grupp fälls ut/ihop, har ett öga för hela gruppen och "Visa bara
   den här"; i sprängvyn hålls en hopfälld grupp ihop. Gäller efter nästa bygge av projektet (⌘B).

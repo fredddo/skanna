@@ -14,6 +14,7 @@ struct Workspace: View {
     @AppStorage(Styrning.nyckel) private var styrning = "mus"
     @AppStorage("hogerflik") private var rightTab = 0          // 0 samtal, 1 mått, 2 historik
     @AppStorage("visaObjektPanel") private var showTree = true
+    @AppStorage("objektPanelBredd") private var objektBredd = 236.0
     @State private var importMal = false
     @State private var upTick = 0
     @State private var keyMonitor: Any?
@@ -117,7 +118,8 @@ struct Workspace: View {
                     HStack(alignment: .top) {
                         if showTree {
                             ObjektPanel(run: run, hide: { withAnimation { showTree = false } })
-                                .frame(width: 236)
+                                .frame(width: CGFloat(objektBredd))
+                                .overlay(alignment: .trailing) { BreddHandtag(bredd: $objektBredd) }
                                 .transition(.move(edge: .leading).combined(with: .opacity))
                         } else {
                             Button { withAnimation { showTree = true } } label: {
@@ -839,5 +841,32 @@ extension Runner {
             }
         }
         do { try p.run() } catch { toast = "Kunde inte starta exporten: \(error.localizedDescription)" }
+    }
+}
+
+
+/// Handtag i en panels högerkant: dra för att ändra bredden (sparas), dubbelklicka för standardbredd.
+struct BreddHandtag: View {
+    @Binding var bredd: Double
+    var minsta = 200.0, storsta = 640.0, standard = 236.0
+    @State private var start: Double?
+    @State private var over = false
+    var body: some View {
+        Rectangle().fill(Color.clear).frame(width: 8).contentShape(Rectangle())
+            .overlay(Capsule().fill(Color.accentColor.opacity(over || start != nil ? 0.6 : 0)).frame(width: 2).padding(.vertical, 10))
+            .offset(x: 4)
+            .onHover { inne in
+                over = inne
+                if inne { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { g in
+                    let s = start ?? bredd
+                    start = s
+                    bredd = min(storsta, max(minsta, s + g.translation.width))
+                }
+                .onEnded { _ in start = nil })
+            .onTapGesture(count: 2) { bredd = standard }
+            .tips("Dra för att ändra panelens bredd · dubbelklicka för standardbredd")
     }
 }
