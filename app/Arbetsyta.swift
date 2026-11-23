@@ -11,6 +11,7 @@ struct Workspace: View {
     @AppStorage("cadStyle") private var cadStyle = 2          // 0 fyllt, 1 kanter, 2 båda
     @AppStorage("shading") private var shading = 1
     @AppStorage("background") private var background = 0
+    @AppStorage(Styrning.nyckel) private var styrning = "mus"
     @AppStorage("hogerflik") private var rightTab = 0          // 0 samtal, 1 mått, 2 historik
     @AppStorage("visaObjektPanel") private var showTree = true
     @State private var importMal = false
@@ -72,6 +73,7 @@ struct Workspace: View {
                 Picker("Upp i 3D-vyn", selection: Binding(get: { Int(upSign) }, set: { UserDefaults.standard.set($0, forKey: upKey); upTick += 1 })) {
                     Text("+Z (som i Bambu Studio)").tag(1); Text("−Z (skalets öppning)").tag(-1)
                 }
+                Picker("Styr 3D-vyn med", selection: $styrning) { Text("Mus").tag("mus"); Text("Styrplatta").tag("styrplatta") }
                 Divider()
                 Button("Bygg om delarna (⌘B)") { run.rebuild() }.disabled(!run.canEdit || run.rebuilding)
                 Button("Visa projektet i Finder (⇧⌘R)") { run.revealProject() }
@@ -81,8 +83,10 @@ struct Workspace: View {
                     Button("Kopiera skanningens sökväg") { run.copyModelPath() }
                 }
                 Button("Kortkommandon …") { run.showShortcuts = true }
+                Divider()
+                SettingsLink { Text("Inställningar … (⌘,)") }
             } label: { Image(systemName: "gearshape") }
-            .menuStyle(.borderlessButton).frame(width: 34).tips("Bakgrund, upp-riktning, uppdraget till Claude och kortkommandon (⌘/)")
+            .menuStyle(.borderlessButton).frame(width: 34).tips("Bakgrund, upp-riktning, styrning, uppdraget till Claude, kortkommandon och Inställningar (⌘,)")
         }
     }
 

@@ -6,6 +6,7 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Kugghjulet:** har nu **Inställningar … (⌘,)** och valet **Styr 3D-vyn med** (Mus/Styrplatta) direkt i menyn.
 - **STEP-import med trasiga ytor:** ytor som OCCT inte kan triangulera (t.ex. vissa koner i en Fusion-export) fäller inte
   längre hela bygget. De hoppas över med en varning (syns inte och går inte att välja), och 3MF:en görs då från STL:en.
 - **Styrplatta-läge (Inställningar ⌘, → Styrning av 3D-vyn):** två fingrar vrider (⇧ + två fingrar flyttar), klicka
