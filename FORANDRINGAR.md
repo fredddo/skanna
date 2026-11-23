@@ -6,6 +6,8 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **STEP-import med trasiga ytor:** ytor som OCCT inte kan triangulera (t.ex. vissa koner i en Fusion-export) fäller inte
+  längre hela bygget. De hoppas över med en varning (syns inte och går inte att välja), och 3MF:en görs då från STL:en.
 - **Styrplatta-läge (Inställningar ⌘, → Styrning av 3D-vyn):** två fingrar vrider (⇧ + två fingrar flyttar), klicka
   och dra med ett finger flyttar vyn (⌥/⇧ + dra vrider), nyp zoomar mot pekaren, dubbeltryck med två fingrar visar hela
   modellen. Nyp och vridning hålls isär: medan ett nyp pågår (och strax efter) räknas inga svep som vridning, och

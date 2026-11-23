@@ -50,6 +50,25 @@ def _kant(e, i, face_ids):
             "p": [round(x, 4) for q in pts for x in (q.X, q.Y, q.Z)], "ytor": sorted(face_ids)}
 
 
+def _tessellera(f, tolerance, angular):
+    """Trianglar för en yta. Vissa ytor (ofta i importerad STEP) får ingen triangulering alls – då gör OCCT:s
+    tessellate ett AttributeError på None. Försök igen med grövre tolerans; går det inte returneras ([], [])
+    så att ytan hoppas över i stället för att hela bygget fallerar."""
+    for tol, ang in ((tolerance, angular), (tolerance * 10, angular * 2), (max(tolerance * 50, 0.5), 0.5)):
+        try:
+            from OCP.BRepMesh import BRepMesh_IncrementalMesh
+            from OCP.BRepTools import BRepTools
+            if (tol, ang) != (tolerance, angular):
+                BRepTools.Clean_s(f.wrapped)
+                BRepMesh_IncrementalMesh(f.wrapped, tol, False, ang, True)
+            verts, tris = f.tessellate(tol, ang)
+            if tris:
+                return verts, tris
+        except Exception:
+            continue
+    return [], []
+
+
 def export_faces(solid, path: Path, tolerance=0.02, angular=0.15):
     faces = list(solid.faces())
     fidx = {hash(f): i for i, f in enumerate(faces)}
@@ -64,11 +83,13 @@ def export_faces(solid, path: Path, tolerance=0.02, angular=0.15):
             kropp_av[fidx.get(hash(f))] = k
     ytor = []
     edge_faces = {}
+    hoppade = 0
     for i, f in enumerate(faces):
         for e in f.edges():
             edge_faces.setdefault(hash(e), set()).add(i)
-        verts, tris = f.tessellate(tolerance, angular)
+        verts, tris = _tessellera(f, tolerance, angular)
         if not tris:
+            hoppade += 1
             continue
         c = f.center()
         normal = None
@@ -93,6 +114,9 @@ def export_faces(solid, path: Path, tolerance=0.02, angular=0.15):
             kanter.append(_kant(e, i, edge_faces.get(hash(e), ())))
         except Exception:
             continue
+    if hoppade:
+        print(f"Varning: {hoppade} av {len(faces)} ytor gick inte att triangulera och visas/går inte att välja "
+              f"(trasig eller degenererad yta i geometrin)", flush=True)
     Path(path).write_text(json.dumps({"ytor": ytor, "kanter": kanter, "kroppar": kroppar},
                                      separators=(",", ":"), ensure_ascii=False))
     return len(ytor)

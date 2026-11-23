@@ -202,9 +202,19 @@ class Projekt:
             bb = ps.bounding_box()
             printed = ps.moved(Location((-(bb.min.X + bb.max.X) / 2, -(bb.min.Y + bb.max.Y) / 2, -bb.min.Z)))
             export_stl(printed, str(self.cad / f"{pid}.stl"), tolerance=0.01, angular_tolerance=0.1)
-            m = Mesher()
-            m.add_shape(printed)
-            m.write(str(self.cad / f"{pid}.3mf"))
+            try:
+                m = Mesher()
+                m.add_shape(printed)
+                m.write(str(self.cad / f"{pid}.3mf"))
+            except AttributeError:
+                # Någon yta gick inte att triangulera (händer i importerad STEP, t.ex. koner med spets/söm):
+                # Mesher kraschar på den. Gör 3MF av STL:en i stället – den hoppar över ytan, vilket ger ett litet
+                # hål i nätet som Bambu Studio lagar vid import.
+                import trimesh
+                t = trimesh.load(str(self.cad / f"{pid}.stl"))
+                _skriv_3mf(t.vertices, t.faces, self.cad / f"{pid}.3mf")
+                print(f"Varning: {pid}: någon yta gick inte att triangulera – 3MF gjord från STL:en "
+                      f"(litet hål i nätet, Bambu Studio lagar det)", flush=True)
             export = f"{pid}.3mf"
         import sys
         from pathlib import Path as _P
@@ -239,3 +249,21 @@ class Projekt:
             geo["avvikelse"] = avvikelse
         (self.cad / "geometri.json").write_text(json.dumps(geo, ensure_ascii=False, indent=2))
         return geo
+
+
+def _skriv_3mf(verts, tris, path):
+    """Minimal 3MF (mm, ett nät) utan lxml/lib3mf – reserv när build123d:s Mesher inte klarar formen."""
+    import zipfile
+    v = "".join(f'<vertex x="{x:.5f}" y="{y:.5f}" z="{z:.5f}"/>' for x, y, z in verts)
+    t = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in tris)
+    model = ('<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" '
+             'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>'
+             f'<object id="1" type="model"><mesh><vertices>{v}</vertices><triangles>{t}</triangles></mesh></object>'
+             '</resources><build><item objectid="1"/></build></model>')
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                   '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                   '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>')
+        z.writestr("_rels/.rels", '<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                   '<Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>')
+        z.writestr("3D/3dmodel.model", model)
