@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Vridning utan stopp:** dra upp/ner så snurrar vyn så länge du vill, också över toppen (modellen blir då upp och ner,
+  och kuben följer med). Sidled vrider runt upp-axeln. ⌘0, ⌘1–⌘7 och kubens sidor rätar upp vyn igen.
+- **Kubens sidor ger exakta vyer:** TOPP/BOTTEN rakt uppifrån/underifrån (platt, texten läsbar), sidorna exakt vågräta.
 - **Underdelar går att fälla ihop:** en del med underdelar (t.ex. Cellbädd under Distansring) har en pil ▸ i
   objektträdet, precis som en del med flera kroppar. Hopfälld står underdelarnas namn efter "+", förälderns öga döljer
   dem också, och i sprängvyn följer de med föräldern. Utfälld har varje underdel eget öga och sprängs för sig.

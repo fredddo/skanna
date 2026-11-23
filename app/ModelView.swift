@@ -44,19 +44,22 @@ struct ModelView: NSViewRepresentable {
         func setUp(_ sign: Float) {
             guard sign != upSign else { return }
             upSign = sign
-            U = SIMD3<Float>(0, 0, sign); E2 = SIMD3<Float>(0, sign, 0)
+            U = SIMD3<Float>(0, 0, sign); E2 = SIMD3<Float>(0, sign, 0); upp = U
             (cubeBox.geometry as? SCNBox)?.materials = Coordinator.cubeMaterials(sign)
             if let v = view, v.scene != nil, snapped == nil { syncFromPov(); applyCamera(animated: false) }
         }
         var yaw: Float = -0.6, pitch: Float = 0.6, dist: Float = 200
         var target = SIMD3<Float>(0, 0, 0)
+        /// Kamerans upp-riktning. U i standardvyerna; när man vrider upp/ner följer den med (inget stopp – man kan
+        /// snurra över toppen, då är modellen upp och ner). ⌘0, kubens sidor och ⌘1–⌘7 rätar upp vyn igen.
+        var upp = SIMD3<Float>(0, 0, -1)
         func dir(_ y: Float, _ p: Float) -> SIMD3<Float> { cos(p) * (cos(y) * E1 + sin(y) * E2) + sin(p) * U }
         func applyCamera(animated: Bool) {
             guard let pov = view?.pointOfView else { return }
             SCNTransaction.begin()
             SCNTransaction.animationDuration = animated ? 0.35 : 0
             pov.simdPosition = target + dir(yaw, pitch) * dist
-            pov.simdLook(at: target, up: U, localFront: [0, 0, -1])
+            pov.simdLook(at: target, up: upp, localFront: [0, 0, -1])
             SCNTransaction.commit()
         }
         func syncFromPov() {
@@ -66,6 +69,7 @@ struct ModelView: NSViewRepresentable {
             let d = v / dist
             pitch = asin(max(-1, min(1, simd_dot(d, U))))
             yaw = atan2(simd_dot(d, E2), simd_dot(d, E1))
+            upp = simd_dot(pov.simdWorldUp, U) < 0 ? -U : U
         }
         func leavePhoto() { if snapped != nil { unsnap(); syncFromPov() } }
         /// Vridning runt det valda (delens/kroppens mitt) eller, utan val, runt hela modellens mitt. Kameran hoppar inte:
@@ -73,18 +77,24 @@ struct ModelView: NSViewRepresentable {
         func orbit(_ dx: CGFloat, _ dy: CGFloat) {
             if follow, snapped != nil { scrub(dx); return }   // fotoläge: spola i videon
             leavePhoto()
-            let y0 = yaw, p0 = pitch
-            yaw -= Float(dx) * 0.01
-            pitch = max(-1.55, min(1.55, pitch + Float(dy) * 0.01))
             let q = valtCentrum()?.0 ?? center
-            if simd_length(q - target) > 1e-4 {
-                let d0 = dir(y0, p0)
-                var h = d0 - simd_dot(d0, U) * U
-                if simd_length(h) < 1e-4 { h = cos(y0) * E1 + sin(y0) * E2 }
-                let axel = simd_normalize(simd_cross(simd_normalize(h), U))   // vågrät, vinkelrät mot blicken
-                let r = simd_quatf(angle: yaw - y0, axis: U) * simd_quatf(angle: pitch - p0, axis: axel)
-                target = q + r.act(target - q)
-            }
+            let C = target + dir(yaw, pitch) * dist
+            let d = simd_normalize(C - target)
+            // kamerans upp/höger (vinkelräta mot blicken)
+            var up0 = upp - simd_dot(upp, d) * d
+            if simd_length(up0) < 1e-4, let pov = view?.pointOfView { up0 = pov.simdWorldUp }
+            up0 = simd_normalize(up0)
+            let hoger = simd_normalize(simd_cross(-d, up0))
+            // sidled: runt upp-axeln (åt andra hållet när vyn är upp och ner, så det följer musen); upp/ner: runt
+            // kamerans högeraxel – utan stopp
+            let s: Float = simd_dot(up0, U) >= 0 ? 1 : -1
+            let r = simd_quatf(angle: -Float(dx) * 0.01 * s, axis: U) * simd_quatf(angle: -Float(dy) * 0.01, axis: hoger)
+            target = q + r.act(target - q)
+            let C1 = q + r.act(C - q)
+            upp = simd_normalize(r.act(up0))
+            let d1 = simd_normalize(C1 - target)
+            pitch = asin(max(-1, min(1, simd_dot(d1, U))))
+            yaw = atan2(simd_dot(d1, E2), simd_dot(d1, E1))
             applyCamera(animated: false)
         }
         /// Mitt och radie (världskoordinater, med flytt/sprängning) för vald kropp eller del; nil utan val.
@@ -175,7 +185,7 @@ struct ModelView: NSViewRepresentable {
         }
         func fitView() {
             leavePhoto()
-            target = center; dist = fitDistance()
+            target = center; dist = fitDistance(); upp = U
             applyCamera(animated: true)
         }
         /// Klick inne i vykuben ska bara gå till kuben, inte bli en nål i modellen.
@@ -466,7 +476,11 @@ struct ModelView: NSViewRepresentable {
             if name == "Valt" { zoomaTillValt(); return }
             guard let (y, p) = views[name] else { return }
             unsnap()
-            yaw = y; pitch = p; target = center; dist = fitDistance()
+            yaw = y; pitch = p; target = center; dist = fitDistance(); upp = U
+            // exakt rakt uppifrån/underifrån (ligger platt); skärmens upp = världens +Y (TOPP) resp. −Y (BOTTEN),
+            // så att kubens text står rätt
+            if name == "Topp" { pitch = .pi / 2; upp = SIMD3<Float>(0, 1, 0) }
+            if name == "Botten" { pitch = -.pi / 2; upp = SIMD3<Float>(0, -1, 0) }
             if follow, let f = nearest(from: dir(y, p), maxAngle: 180) {
                 applyCamera(animated: false); snap(f, animated: true); noteAngle(f, dir(y, p)); return
             }
@@ -971,7 +985,7 @@ struct ModelView: NSViewRepresentable {
                     if let camera { root.rootNode.addChildNode(camera); v.pointOfView = camera; c.syncFromPov() } else {
                         let cam = SCNNode(); cam.camera = c.normalCamera()
                         root.rootNode.addChildNode(cam); v.pointOfView = cam
-                        c.target = c.center; c.dist = c.fitDistance(); c.yaw = -0.6; c.pitch = 0.6
+                        c.target = c.center; c.dist = c.fitDistance(); c.yaw = -0.6; c.pitch = 0.6; c.upp = c.U
                         c.applyCamera(animated: false)
                     }
                     c.triCache = [:]
