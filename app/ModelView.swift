@@ -1243,7 +1243,11 @@ final class HoverSCNView: SCNView {
         if capturing { dragging = true; onItemDrag?(event.deltaX, event.deltaY); return }
         if !dragging { dragging = true; onDragStart?() }
         let vrid = event.modifierFlags.contains(.option) && optionVrider?() == true
-        if !vrid && (event.modifierFlags.contains(.option) || event.modifierFlags.contains(.shift)) {
+        let tangent = event.modifierFlags.contains(.option) || event.modifierFlags.contains(.shift)
+        if Styrning.styrplatta && !vrid {
+            // Styrplatta: dra (klick/tryck + ett finger) flyttar vyn; ⌥/⇧ + dra vrider
+            if tangent { onOrbit?(event.deltaX, event.deltaY) } else { onPan?(event.deltaX, event.deltaY) }
+        } else if !vrid && tangent {
             onPan?(event.deltaX, event.deltaY)
         } else {
             onOrbit?(event.deltaX, event.deltaY)
@@ -1263,10 +1267,32 @@ final class HoverSCNView: SCNView {
     override func otherMouseDragged(with event: NSEvent) { onPan?(event.deltaX, event.deltaY) }
     override func scrollWheel(with event: NSEvent) {
         onScroll?()
+        // Styrplatta-läge: två fingrar vrider (⇧: flyttar vyn). Ett vanligt mushjul (utan exakta deltan) zoomar ändå.
+        if Styrning.styrplatta && event.hasPreciseScrollingDeltas {
+            if event.phase == .began { svepVrider = !nyper }
+            // Efterglid (fingrarna har släppt) och svep som började under ett nyp ignoreras: vyn står still när man
+            // släpper, och nypet blandas inte ihop med vridning.
+            if !event.momentumPhase.isEmpty || nyper || !svepVrider || Date() < nypSlut { return }
+            // Följ fingrarna oavsett macOS-inställningen "naturlig rullning"
+            let k: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+            let dx = event.scrollingDeltaX * k, dy = event.scrollingDeltaY * k
+            if event.modifierFlags.contains(.shift) { onPan?(dx, dy) } else { onOrbit?(dx, dy) }
+            if event.phase == .ended || event.phase == .cancelled { svepVrider = false }
+            return
+        }
         let d = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY * 0.01 : event.scrollingDeltaY * 0.12
         onZoom?(d, convert(event.locationInWindow, from: nil))
     }
-    override func magnify(with event: NSEvent) { onZoom?(event.magnification * 2.5, convert(event.locationInWindow, from: nil)) }
+    override func magnify(with event: NSEvent) {
+        if event.phase == .began { nyper = true }
+        if event.phase == .ended || event.phase == .cancelled { nyper = false; nypSlut = Date().addingTimeInterval(0.2) }
+        onZoom?(event.magnification * 2.5, convert(event.locationInWindow, from: nil))
+    }
+    /// Dubbeltryck med två fingrar (smart zoom): hela modellen, som dubbelklick.
+    override func smartMagnify(with event: NSEvent) { onFit?() }
+    private var nyper = false               // ett nyp (zoom) pågår
+    private var nypSlut = Date.distantPast  // svep strax efter ett nyp räknas inte som vridning
+    private var svepVrider = true
     private var area: NSTrackingArea?
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -1368,3 +1394,10 @@ func worldBounds(_ root: SCNNode) -> (SIMD3<Float>, SIMD3<Float>) {
 }
 
 
+
+
+/// Hur 3D-vyn styrs (Inställningar → Styrning av 3D-vyn).
+enum Styrning {
+    static let nyckel = "styrning"          // "mus" (standard) eller "styrplatta"
+    static var styrplatta: Bool { UserDefaults.standard.string(forKey: nyckel) == "styrplatta" }
+}

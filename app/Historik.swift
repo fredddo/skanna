@@ -365,6 +365,7 @@ struct InstallningarVy: View {
     @ObservedObject var run: Runner
     @AppStorage("projektRot") private var rotStig = ""
     @AppStorage("skanningarIProjektmappen") private var skanningarIRot = true
+    @AppStorage(Styrning.nyckel) private var styrning = "mus"
     @State private var rotLage: GitLage = .okand
     @State private var fel: String?
     @State private var attFlytta: (fran: URL, projekt: [URL])?
@@ -407,6 +408,17 @@ struct InstallningarVy: View {
                 Text("Appen gör en commit när en ändring har satt sig – Claude har byggt färdigt, ett mått är ändrat, du byter projekt eller stänger appen. Bara cad/ och projekt.json versioneras; bilder, video och mesh (hundratals MB) hålls utanför via projektets .gitignore. Appen pushar aldrig.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } header: { Text("Historik (git)") }
+
+            Section {
+                Picker("Styr med", selection: $styrning) {
+                    Text("Mus").tag("mus")
+                    Text("Styrplatta").tag("styrplatta")
+                }.pickerStyle(.segmented)
+                Text(styrning == "styrplatta"
+                     ? "Två fingrar: vrid (⇧ + två fingrar: flytta vyn). Klicka och dra med ett finger: flytta vyn (⌥/⇧ + dra: vrid). Nyp: zooma mot pekaren. Dubbeltryck med två fingrar: hela modellen. Ett vanligt mushjul zoomar fortfarande."
+                     : "Dra: vrid. Högerdra eller ⌥/⇧ + dra: flytta vyn. Skrolla eller nyp: zooma mot pekaren.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } header: { Text("Styrning av 3D-vyn") }
         }
         .formStyle(.grouped)
         .frame(width: 560)

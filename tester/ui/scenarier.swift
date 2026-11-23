@@ -83,6 +83,45 @@ enum Scenarier {
             kolla(avst(proj(q), mitt) < 3, "locket ska hamna mitt i vyn, är \(avst(proj(q), mitt)) px därifrån")
         }]),
 
+        s("Styrplatta: två fingrar vrider, dra flyttar, mushjul zoomar", [.gor {
+            guard let (scn, c) = vy() else { kolla(false, "ingen vy"); return }
+            func svep(_ dx: Int32, _ dy: Int32, fas: Int64, exakt: Bool = true, skift: Bool = false) -> NSEvent {
+                let e = CGEvent(scrollWheelEvent2Source: nil, units: exakt ? .pixel : .line, wheelCount: 2, wheel1: dy, wheel2: dx, wheel3: 0)!
+                e.setIntegerValueField(.scrollWheelEventIsContinuous, value: exakt ? 1 : 0)
+                e.setIntegerValueField(.scrollWheelEventScrollPhase, value: fas)
+                if skift { e.flags = .maskShift }
+                return NSEvent(cgEvent: e)!
+            }
+            func dra(_ dx: Int64, _ dy: Int64) -> NSEvent {
+                let e = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: CGPoint(x: 400, y: 300), mouseButton: .left)!
+                e.setIntegerValueField(.mouseEventDeltaX, value: dx); e.setIntegerValueField(.mouseEventDeltaY, value: dy)
+                return NSEvent(cgEvent: e)!
+            }
+            UserDefaults.standard.set("styrplatta", forKey: Styrning.nyckel)
+            defer { UserDefaults.standard.removeObject(forKey: Styrning.nyckel) }
+            var (yaw, dist, mal) = (c.yaw, c.dist, c.target)
+            scn.scrollWheel(with: svep(30, 0, fas: 1)); scn.scrollWheel(with: svep(30, 10, fas: 2))
+            kolla(abs(c.yaw - yaw) > 0.1, "två fingrar ska vrida vyn")
+            kolla(abs(c.dist - dist) < 1e-4, "två fingrar ska inte zooma")
+            (yaw, dist, mal) = (c.yaw, c.dist, c.target)
+            scn.scrollWheel(with: svep(20, 0, fas: 2, skift: true))
+            kolla(abs(c.yaw - yaw) < 1e-5 && simd_length(c.target - mal) > 1e-3, "⇧ + två fingrar ska flytta vyn")
+            scn.scrollWheel(with: svep(0, 0, fas: 4))
+            (yaw, dist, mal) = (c.yaw, c.dist, c.target); let pitch = c.pitch
+            scn.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 400, y: 300), modifierFlags: [], timestamp: 0,
+                                                   windowNumber: win.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+            scn.mouseDragged(with: dra(25, 10))
+            kolla(abs(c.yaw - yaw) < 1e-5 && abs(c.pitch - pitch) < 1e-5, "dra ska inte vrida i styrplattaläget")
+            kolla(simd_length(c.target - mal) > 1e-3, "dra ska flytta vyn i styrplattaläget")
+            (yaw, dist, mal) = (c.yaw, c.dist, c.target)
+            scn.scrollWheel(with: svep(0, 3, fas: 0, exakt: false))
+            kolla(abs(c.dist - dist) > 1e-4 && abs(c.yaw - yaw) < 1e-5, "ett vanligt mushjul ska zooma, inte vrida")
+            UserDefaults.standard.removeObject(forKey: Styrning.nyckel)
+            (yaw, dist) = (c.yaw, c.dist)
+            scn.scrollWheel(with: svep(30, 10, fas: 1))
+            kolla(abs(c.dist - dist) > 1e-4 && abs(c.yaw - yaw) < 1e-5, "musläget: två fingrar zoomar som förut")
+        }]),
+
         s("Sprängvy håller ihop hopfällda delar", [
             .gor { run.explode = 1 }, .vanta(0.8), .gor {
                 guard let (_, c) = vy() else { return }

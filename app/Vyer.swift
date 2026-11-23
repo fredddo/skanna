@@ -529,7 +529,7 @@ struct ToastView: View {
 struct ShortcutsSheet: View {
     @Environment(\.dismiss) private var dismiss
     private typealias Grupp = (titel: String, ikon: String, rader: [(String, String)])
-    private let vanster: [Grupp] = [
+    private var vanster: [Grupp] { [
         ("Verktyg", "cursorarrow", [
             ("V", "Välj – mått på det du klickar"), ("M", "Mät mellan två punkter"),
             ("P", "Peka – A, B, C … till nästa chattmeddelande (Esc rensar punkterna)"), ("D", "Rita i vyn (⌥ + dra = vrid)"), ("Mellanslag (håll)", "Prata in till chattrutan – släpp när du är klar"), ("G", "Flytta del tillfälligt (⇧: rakt längs X/Y/Z)"),
@@ -539,9 +539,11 @@ struct ShortcutsSheet: View {
             ("Esc", "Kasta ritningen")]),
         ("Vy", "cube", [
             ("⌘0 · dubbelklick", "Hela modellen"), ("Z", "Zooma in på det valda (vyn vrider runt det valda)"), ("⌘1 … ⌘6", "Topp, fram, höger, bak, vänster, botten"), ("⌘7", "Perspektiv"),
-            ("Dra", "Vrid"), ("⌥-dra · högerdra", "Flytta vyn"), ("Nyp · skrolla", "Zooma mot pekaren"),
+        ] + (Styrning.styrplatta
+             ? [("Två fingrar", "Vrid (⇧: flytta vyn)"), ("Klicka och dra", "Flytta vyn (⌥/⇧: vrid)"), ("Nyp", "Zooma mot pekaren")]
+             : [("Dra", "Vrid"), ("⌥-dra · högerdra", "Flytta vyn"), ("Nyp · skrolla", "Zooma mot pekaren")]) + [
             ("X", "Snitt av/på"), ("⌘K", "Fotoläge av/på"), ("← →", "Föregående/nästa foto i fotoläget")]),
-    ]
+    ] }
     private let hoger: [Grupp] = [
         ("Projekt", "folder", [
             ("⌘N", "Nytt modellprojekt"), ("⌘O", "Öppna projekt"), ("⇧⌘R", "Visa projektet i Finder"),

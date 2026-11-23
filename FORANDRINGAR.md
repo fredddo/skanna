@@ -6,6 +6,10 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Styrplatta-läge (Inställningar ⌘, → Styrning av 3D-vyn):** två fingrar vrider (⇧ + två fingrar flyttar), klicka
+  och dra med ett finger flyttar vyn (⌥/⇧ + dra vrider), nyp zoomar mot pekaren, dubbeltryck med två fingrar visar hela
+  modellen. Nyp och vridning hålls isär: medan ett nyp pågår (och strax efter) räknas inga svep som vridning, och
+  efterglid när fingrarna släppt ignoreras. Ett vanligt mushjul zoomar fortfarande. Standard är Mus (som förut).
 - **Stödplast på X2D:s hjälpmunstycke:** under Skriv ut-pilen finns **Stödplast** (Ingen / PLA …). Stödets kontaktyta
   skrivs då i den plasten på hjälpmunstycket, t.ex. PLA mot PETG-CF som släpper lätt; Bambu-filen får en egen
   filamentplats för stödet, mappad till hjälpmunstycket. Kräver att support är på. Kontrollera första gången i Bambu
