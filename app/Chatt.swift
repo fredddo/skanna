@@ -276,7 +276,7 @@ struct ChattPanel: View {
         let active = data.threads.filter { $0.status.aktiv }
         let done = data.threads.filter { !$0.status.aktiv }
         VStack(alignment: .leading, spacing: 8) {
-            statusLine
+            statusLine(active)
             // Allt i en rullning: aktiva trådar överst (hela texten), historiken under. Inga dolda höjdgränser.
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
@@ -320,9 +320,62 @@ struct ChattPanel: View {
     }
 
     // Claudes övergripande status, tunn rad
-    @ViewBuilder private var statusLine: some View {
+    /// Trådar där ditt meddelande ligger sist utan svar, äldsta väntetid först.
+    private func obesvarade(_ active: [ChatThread]) -> [ChatThread] {
+        active.filter { $0.status == .vantar && $0.entries.last?.fromClaude == false }.sorted { $0.lastTid < $1.lastTid }
+    }
+    /// Claude har inte svarat på en tid och arbetar inte: troligen lyssnar ingen Claude-chatt just nu.
+    private func tystClaude(_ active: [ChatThread]) -> [ChatThread] {
+        guard run.claude?.status != "arbetar" || run.claudeTyst else { return [] }
+        let o = obesvarade(active)
+        let f = ISO8601DateFormatter()
+        guard let forsta = o.first, let t = f.date(from: forsta.lastTid), Date().timeIntervalSince(t) > 180 else { return [] }
+        return o
+    }
+    private func paminnelse(_ o: [ChatThread]) -> String {
+        let lista = o.map { "• \(chattTid($0.lastTid)): \($0.title)" }.joined(separator: "\n")
+        return """
+        Påminnelse från \(Hem.appNamn): \(o.count) meddelande\(o.count == 1 ? "" : "n") i projektet \(run.output?.path ?? "") väntar på svar:
+        \(lista)
+        Läs cad/svar.json, svara i varje tråd (cad/meddela.py … --svar-pa <tid>) och bevaka sedan projektet med bevaka.sh, så att du ser nästa meddelande.
+        """
+    }
+
+    @ViewBuilder private func statusLine(_ active: [ChatThread]) -> some View {
+        let tyst = tystClaude(active)
+        let fragaUtanTrad = run.claude?.status == "fraga" && !active.contains { $0.status == .fraga }
         HStack(spacing: 6) {
-            if run.claude == nil {
+            if !tyst.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.bubble.fill").foregroundStyle(.orange).font(.caption)
+                    Text("Inget svar på \(tyst.count) meddelande\(tyst.count == 1 ? "" : "n") sedan \(chattTid(tyst[0].lastTid)) – lyssnar Claude?")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("Kopiera påminnelse") {
+                        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(paminnelse(tyst), forType: .string)
+                        run.toast = "Påminnelsen är kopierad – klistra in den i chatten med Claude"
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12)))
+                .tips("Claude körs i en egen chatt (Claude Code) och ser bara nya meddelanden när den bevakar projektet. Appen kan inte väcka den – klistra in påminnelsen där.")
+            } else if fragaUtanTrad {
+                Button { run.skrivFokus += 1 } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "questionmark.circle.fill").foregroundStyle(.orange).font(.caption)
+                        Text("Claude väntar på ditt svar: \(run.claude?.status_text ?? "")").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                        Text("Svara").font(.caption.bold()).foregroundStyle(Color.accentColor)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .tips("Claude frågar utan att frågan hör till en tråd. Klicka och skriv ditt svar i rutan längst ner – det blir en ny tråd som Claude läser.")
+            } else if run.claude == nil {
                 Button { run.copyClaudeText() } label: { Label("Kopiera uppdrag till Claude", systemImage: "doc.on.clipboard") }
                     .tips("Klistra in i chatten med Claude (Claude Code). Claude läser då AGENT.md och svarar här i appen.")
             } else if let st = run.claude?.status {

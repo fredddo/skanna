@@ -136,7 +136,13 @@ Chattpanelen i appen är uppdelad i **trådar**. Flera kan vara aktiva samtidigt
 - **Avsluta.** När uppdraget är klart och verifierat: `--trad TID --status klar` (gärna med en kort sammanfattning via
   `--svar`). Klara trådar fälls ihop under "Avslutade". Kommer ett nytt användarmeddelande i tråden är den aktiv igen.
 - **Status utan `--trad`** (`--status arbetar "text"`, `--klar "text"`) är den övergripande raden överst i chatten. Sätt
-  den efter att alla trådar är hanterade, inte per tråd.
+  den efter att alla trådar är hanterade, inte per tråd. **Ställ aldrig en fråga bara i den övergripande raden**
+  (`--status fraga "Väntar på …"`): användaren kan inte svara på den. Ställ frågan i tråden den hör till
+  (`--svar "…" --svar-pa <tid>` + `--trad TID --status fraga`).
+- **Svara på varje meddelande och fortsätt bevaka.** Läs alla nya meddelanden i `svar.json` innan du avslutar och svara i
+  varje tråd. Bevaka sedan projektet (`bevaka.sh`) – annars ser du inte nästa meddelande. Har du inte svarat inom några
+  minuter och inte står som `arbetar`, visar appen "Inget svar på N meddelanden – lyssnar Claude?" och användaren får
+  klistra in en påminnelse till dig.
 - **Flera trådar samtidigt.** Hantera alla tråd för tråd; sätt `arbetar` på dem du tagit tag i och låt övriga vara.
   Börja med trådar i status "fråga till dig" som nyss fått svar. Glöm inte att avsluta varje tråd för sig.
 

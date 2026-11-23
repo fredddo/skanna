@@ -6,6 +6,10 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Chatten säger till när Claude inte svarar:** har dina meddelanden väntat över 3 minuter utan att Claude arbetar,
+  visar raden överst "Inget svar på N meddelanden – lyssnar Claude?" med knappen **Kopiera påminnelse** (klistra in i
+  chatten med Claude). Frågar Claude i den översta raden utan att frågan hör till en tråd går raden nu att klicka på:
+  markören hamnar i skrivfältet så att du kan svara.
 - **Vridning utan stopp:** dra upp/ner så snurrar vyn så länge du vill, också över toppen (modellen blir då upp och ner,
   och kuben följer med). Sidled vrider runt upp-axeln. ⌘0, ⌘1–⌘7 och kubens sidor rätar upp vyn igen.
 - **Kubens sidor ger exakta vyer:** TOPP/BOTTEN rakt uppifrån/underifrån (platt, texten läsbar), sidorna exakt vågräta.
