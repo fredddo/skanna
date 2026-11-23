@@ -142,9 +142,21 @@ def las_step_med_namn(fil):
             if sh.ShapeType() == TopAbs_SOLID and namn(sub.Value(j)):
                 egna[hash(sh.TShape())] = namn(sub.Value(j))
 
-    delar, namnen, fargerna = [], [], []
+    delar, namnen, fargerna, grupperna = [], [], [], []
 
-    def gå(l, loc, komp, kompfarg=None):
+    def visningsnamn(etiketter):
+        """Namn för syskon i trädet: instansnamnet (Fusion: "DD_Gejdrar:1"), utan ":1" när det bara finns en sådan;
+        samma namn två gånger får (2), (3) … så att varje gren är unik."""
+        ut, sedda = [], {}
+        rå = [namn(l) or (namn(r) if r is not None else None) or "Komponent" for l, r in etiketter]
+        bas = [re.sub(r":\d+$", "", n) for n in rå]
+        for n, b in zip(rå, bas):
+            v = b if bas.count(b) == 1 else n
+            sedda[v] = sedda.get(v, 0) + 1
+            ut.append(v if sedda[v] == 1 else f"{v} ({sedda[v]})")
+        return ut
+
+    def gå(l, loc, komp, kompfarg=None, sti=()):
         ref = l
         if st.IsReference_s(l):
             ref = TDF_Label()
@@ -155,8 +167,16 @@ def las_step_med_namn(fil):
         if st.IsAssembly_s(ref):
             sub = Sequence_TDF_Label()
             st.GetComponents_s(ref, sub)
+            barn = []
             for i in range(1, sub.Length() + 1):
-                gå(sub.Value(i), L, k, kf)
+                c_ = sub.Value(i)
+                r_ = None
+                if st.IsReference_s(c_):
+                    r_ = TDF_Label()
+                    st.GetReferredShape_s(c_, r_)
+                barn.append((c_, r_))
+            for (c_, _), vn in zip(barn, visningsnamn(barn)):
+                gå(c_, L, k, kf, sti + (vn,))
             return
         sh = st.GetShape_s(ref)
         sub = Sequence_TDF_Label()
@@ -166,6 +186,16 @@ def las_step_med_namn(fil):
         under = [(u, n, f) for u, n, f in under if u.ShapeType() == TopAbs_SOLID]
         e = TopExp_Explorer(sh, TopAbs_SOLID)
         hittade = False
+        n_solid = 0
+        while e.More():
+            n_solid += 1
+            e.Next()
+        # en sammansatt form med flera kroppar (t.ex. "Tallriksfjädrar 11 st") är en egen nivå i trädet – utom när
+        # den redan är grenen vi kom in i (komponenten med samma namn)
+        egen_sti = sti
+        if n_solid > 1 and namn(ref) and not (sti and re.sub(r"( \(\d+\))?$", "", sti[-1]) == re.sub(r":\d+$", "", namn(ref))):
+            egen_sti = sti + (namn(ref),)
+        e = TopExp_Explorer(sh, TopAbs_SOLID)
         while e.More():
             s = e.Current()
             hittade = True
@@ -174,6 +204,7 @@ def las_step_med_namn(fil):
             eget = match[0] or egna.get(hash(s.TShape()))
             namnen.append(eget or k)
             fargerna.append(match[1] or formfarg(s) or kf)
+            grupperna.append(list(egen_sti))
             e.Next()
         if not hittade and not sh.IsNull():
             delar.append(sh.Moved(L))      # ytor/skal utan kropp: med i formen, men ingen kropp att namnge
@@ -190,20 +221,33 @@ def las_step_med_namn(fil):
         b.Add(tc, d)
     c = Compound(tc)
     if len(c.solids()) != len(namnen):
-        return c, None, None
+        return c, None, None, None
     if not any(fargerna):
         fargerna = None
-    # Samma namn flera gånger (t.ex. tre likadana fjäderpaket): numrera, så att lagren går att skilja åt
+    # En grupp med bara en kropp (en komponent som är en enda kropp) behövs inte som egen nivå
+    for _ in range(8):
+        per = {}
+        for g in grupperna:
+            for d in range(1, len(g) + 1):
+                per[tuple(g[:d])] = per.get(tuple(g[:d]), 0) + 1
+        ny = [g[:-1] if g and per[tuple(g)] == 1 else g for g in grupperna]
+        if ny == grupperna:
+            break
+        grupperna = ny
+    # Samma namn flera gånger i samma grupp: numrera, så att lagren går att skilja åt
     antal, sedda = {}, {}
-    for n in namnen:
-        antal[n] = antal.get(n, 0) + 1
+    for n, g in zip(namnen, grupperna):
+        antal[(n, tuple(g))] = antal.get((n, tuple(g)), 0) + 1
     ut = []
-    for n in namnen:
-        if n and antal[n] > 1:
-            sedda[n] = sedda.get(n, 0) + 1
-            n = f"{n} ({sedda[n]})"
+    for n, g in zip(namnen, grupperna):
+        key = (n, tuple(g))
+        if n and antal[key] > 1:
+            sedda[key] = sedda.get(key, 0) + 1
+            n = f"{n} ({sedda[key]})"
         ut.append(n)
-    return c, ut, fargerna
+    if len(set(tuple(g) for g in grupperna)) == 1:
+        grupperna = [[] for _ in grupperna]   # en enda grupp för allt = ingen grupp
+    return c, ut, fargerna, grupperna
 
 
 def importera(prj, pid, namn, fil, roll="design", farg="#8E8E93", beskrivning=None, utskrift=True):
@@ -227,10 +271,10 @@ def importera(prj, pid, namn, fil, roll="design", farg="#8E8E93", beskrivning=No
 def _step(prj, pid, namn, src, P, roll, farg, text, utskrift):
     from build123d import Axis, Location
     try:
-        s, kropp_namn, kropp_farger = las_step_med_namn(src)
+        s, kropp_namn, kropp_farger, kropp_grupper = las_step_med_namn(src)
     except Exception as e:                  # reserv: build123d:s läsare (utan kroppsnamn)
         print(f"Varning: kroppsnamnen gick inte att läsa ({e}) – kropparna heter Kropp 1, 2 …", flush=True)
-        s, kropp_namn, kropp_farger = las_step(prj, src.relative_to(prj.cad)), None, None
+        s, kropp_namn, kropp_farger, kropp_grupper = las_step(prj, src.relative_to(prj.cad)), None, None, None
     if abs(P["skala"] - 1) > 1e-9:
         s = s.scale(P["skala"])
     for ax, axis in (("x", Axis.X), ("y", Axis.Y), ("z", Axis.Z)):
@@ -246,7 +290,7 @@ def _step(prj, pid, namn, src, P, roll, farg, text, utskrift):
     if kropp_namn:
         print(f"{sum(1 for n in kropp_namn if n)} av {len(kropp_namn)} kroppar har namn från filen", flush=True)
     prj.del_(pid, namn, s, roll=roll, farg=farg, beskrivning=text, utskrift=utskrift and bool(s.solids()),
-             kropp_namn=kropp_namn, kropp_farger=kropp_farger)
+             kropp_namn=kropp_namn, kropp_farger=kropp_farger, kropp_grupper=kropp_grupper)
 
 
 # ---- STL / 3MF / OBJ ---------------------------------------------------------------------------------------------

@@ -21,6 +21,7 @@ final class Leaf {
     var faceIds: [Int] = []
     var edgeNode: SCNNode?
     var multi: Bool { id != del }
+    var grupp: [String] = []          // komponentträdet ovanför kroppen (importerad sammanställning)
     var center: V3 { (lo + hi) / 2 }
     init(id: String, del: String, node: SCNNode, body: Int?, namn: String, lo: V3, hi: V3, mat: SCNMaterial, edgeMat: SCNMaterial) {
         self.id = id; self.del = del; self.node = node; self.body = body; self.namn = namn; self.lo = lo; self.hi = hi; self.mat = mat; self.edgeMat = edgeMat
@@ -582,7 +583,13 @@ extension ModelView.Coordinator {
     func sprangGrupp(_ leaf: Leaf) -> String {
         let ut = run?.utfallda ?? []
         if let f = foralder(leaf.del), !ut.contains(f) { return f }
-        return leaf.multi && !ut.contains(leaf.del) ? leaf.del : leaf.id
+        if leaf.multi && !ut.contains(leaf.del) { return leaf.del }
+        // importerad sammanställning: kroppar under en hopfälld komponent dras isär tillsammans med den
+        for d in 1...max(1, leaf.grupp.count) where d <= leaf.grupp.count {
+            let k = UnderObjekt.gruppNyckel(leaf.del, Array(leaf.grupp.prefix(d)))
+            if !ut.contains(k) { return k }
+        }
+        return leaf.id
     }
 
     /// Explode gäller bara synliga objekt: de dras isär från sitt gemensamma mittpunkt, och avståndet står i proportion
@@ -812,7 +819,7 @@ extension ModelView.Coordinator {
         guard let run else { return }
         var uo: [String: [UnderObjekt]] = [:]
         for (del, pd) in partData where pd.bodies.count > 1 {
-            uo[del] = pd.bodies.map { UnderObjekt(id: "\(del)#\($0.n)", del: del, namn: $0.namn, ytor: $0.ytor) }
+            uo[del] = pd.bodies.map { UnderObjekt(id: "\(del)#\($0.n)", del: del, namn: $0.namn, ytor: $0.ytor, grupp: $0.grupp) }
         }
         run.underObjekt = uo
         specColors = Dictionary(uniqueKeysWithValues: specs.map { ($0.id, $0) })

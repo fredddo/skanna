@@ -69,7 +69,7 @@ def _tessellera(f, tolerance, angular):
     return [], []
 
 
-def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=None, kropp_farger=None):
+def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=None, kropp_farger=None, kropp_grupper=None):
     """kropp_namn: valfri lista med namn per kropp (i solid.solids()-ordning), t.ex. Fusion-namnen ur en STEP."""
     faces = list(solid.faces())
     fidx = {hash(f): i for i, f in enumerate(faces)}
@@ -80,6 +80,8 @@ def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=Non
         kropp_namn = None                      # t.ex. kantbehandling har ändrat kropparna – namnen går inte att lita på
     if kropp_farger is not None and len(kropp_farger) != len(solider):
         kropp_farger = None
+    if kropp_grupper is not None and len(kropp_grupper) != len(solider):
+        kropp_grupper = None
     for k, s in enumerate(solider):
         bb = s.bounding_box()
         kroppar.append({"id": k, "namn": (kropp_namn and kropp_namn[k]) or f"Kropp {k + 1}", "volym": round(s.volume, 2),
@@ -87,6 +89,8 @@ def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=Non
                         "max": [round(bb.max.X, 3), round(bb.max.Y, 3), round(bb.max.Z, 3)]})
         if kropp_farger and kropp_farger[k]:
             kroppar[-1]["farg"] = kropp_farger[k]
+        if kropp_grupper and kropp_grupper[k]:
+            kroppar[-1]["grupp"] = kropp_grupper[k]   # komponentträdet, t.ex. ["Fjäderpaket (2)", "Variant B"]
         for f in s.faces():
             kropp_av[fidx.get(hash(f))] = k
     ytor = []

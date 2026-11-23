@@ -87,6 +87,9 @@ struct UnderObjekt: Identifiable, Equatable {
     let del: String
     let namn: String        // "Kropp 1" eller namn från ytor.json ("kroppar")
     let ytor: [Int]         // ytornas id
+    var grupp: [String] = []  // komponentträdet ovanför kroppen (importerad sammanställning)
+    /// Nyckel i run.utfallda för gruppen sti (i delen del). Namnen kan innehålla "/", så avgränsaren är \u{1F}.
+    static func gruppNyckel(_ del: String, _ sti: [String]) -> String { del + "\u{1F}" + sti.joined(separator: "\u{1F}") }
 }
 
 /// En begärd kantbehandling (cad/kantbehandling.json) – utförs av projekt.py vid nästa bygge, eller av Claude.

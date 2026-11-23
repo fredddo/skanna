@@ -983,6 +983,7 @@ struct ModelView: NSViewRepresentable {
                             let leaf = Leaf(id: leafId, del: spec.id, node: group, body: multi ? b : nil,
                                             namn: pdata?.bodies.first(where: { $0.n == b })?.namn ?? "Kropp \(b + 1)", lo: lo, hi: hi, mat: m, edgeMat: edgeMat)
                             leaf.edges = leafEdges; leaf.faceIds = faceIds; leaf.edgeNode = edges
+                            if multi { leaf.grupp = pdata?.bodies.first(where: { $0.n == b })?.grupp ?? [] }
                             c.leaves[leafId] = leaf
                             if k == 0 { c.baseMats[spec.id] = m }
                             if lo.x.isFinite { asmLo = simd_min(asmLo, lo); asmHi = simd_max(asmHi, hi) }

@@ -6,6 +6,10 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Komponentträd för importerad STEP:** kropparna visas under sina komponenter som i Fusion (t.ex. fjäderpaket →
+  Variant B → Tallriksfjädrar → Tallrik 1–11). Varje grupp fälls ut/ihop, har ett öga för hela gruppen och "Visa bara
+  den här"; i sprängvyn hålls en hopfälld grupp ihop. Gäller efter nästa bygge av projektet (⌘B).
+- **Objektlistan rullar med en tunn linje** längs kanten i stället för macOS-rullningslisten som låg över ögonen.
 - **Färgscheman färgar varje kropp:** i en del med många kroppar (t.ex. en importerad Fusion-sammanställning) tar
   kropparna var sin färg ur schemat (Skog, Hav …) i stället för att tonas mot vitt/svart. **Delarnas egna färger** visar
   kropparnas färger från Fusion (STEP-importen läser dem nu); kroppar utan färg tonas lätt i delens färg.

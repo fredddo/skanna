@@ -216,11 +216,63 @@ struct ObjektPanel: View {
             Button("Radera", role: .destructive) { run.raderaDel(p.id) }
         }
         if run.utfallda.contains(p.id) && subs.count > 1 {
-            ForEach(subs) { s in
-                row(id: s.id, name: s.namn, sub: nil, color: color.opacity(0.7), icon: nil, indent: 26 + indent)
+            gruppTrad(p, subs: subs, sti: [], color: color, indent: 26 + indent)
+        }
+    }
+
+    /// Kropparna i en del som ett träd efter komponenterna i den importerade filen (grupp = sti från yttersta).
+    /// En grupp fälls ut/ihop, har ett öga för alla sina kroppar och "Visa bara den här".
+    private func gruppTrad(_ p: PartInfo, subs: [UnderObjekt], sti: [String], color: Color, indent: CGFloat) -> AnyView {
+        let d = sti.count
+        let inom = subs.filter { $0.grupp.count >= d && Array($0.grupp.prefix(d)) == sti }
+        var grenar: [String] = []
+        for s in inom where s.grupp.count > d && !grenar.contains(s.grupp[d]) { grenar.append(s.grupp[d]) }
+        let blad = inom.filter { $0.grupp.count == d }
+        return AnyView(VStack(spacing: 0) {
+            ForEach(grenar, id: \.self) { g in
+                let gs = sti + [g]
+                let nyckel = UnderObjekt.gruppNyckel(p.id, gs)
+                let kroppar = subs.filter { $0.grupp.count > d && Array($0.grupp.prefix(d + 1)) == gs }.map(\.id)
+                let ute = run.utfallda.contains(nyckel)
+                let synlig = kroppar.contains { !run.hidden.contains($0) }
+                HStack(spacing: 2) {
+                    Button { if ute { run.utfallda.remove(nyckel) } else { run.utfallda.insert(nyckel) } } label: {
+                        Image(systemName: ute ? "chevron.down" : "chevron.right").font(.caption2).frame(width: 12)
+                    }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    .tips(ute ? "Fäll ihop – i sprängvyn hålls kropparna då ihop" : "Fäll ut – i sprängvyn dras kropparna då isär var för sig")
+                    Image(systemName: "shippingbox").font(.caption2).foregroundStyle(.secondary).frame(width: 12)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(g).lineLimit(1)
+                        Text("\(kroppar.count) kroppar").font(.caption2).foregroundStyle(.secondary)
+                    }.opacity(synlig ? 1 : 0.45)
+                    Spacer(minLength: 0)
+                    Button { if synlig { run.hidden.formUnion(kroppar) } else { run.hidden.subtract(kroppar) } } label: {
+                        Image(systemName: synlig ? "eye" : "eye.slash").frame(width: 18)
+                    }.buttonStyle(.plain).foregroundStyle(synlig ? Color.primary : Color.secondary).tips(synlig ? "Släck gruppen" : "Tänd gruppen")
+                }
+                .padding(.vertical, 3).padding(.horizontal, 4).padding(.leading, indent)
+                .contentShape(Rectangle())
+                .onTapGesture { if ute { run.utfallda.remove(nyckel) } else { run.utfallda.insert(nyckel) } }
+                .tips("\(g)\n\(kroppar.count) kroppar\n\nKlicka för att fälla ut/ihop · ögat tänder/släcker hela gruppen")
+                .contextMenu {
+                    Button("Visa bara den här") { isolera(p.id, kroppar) }
+                    Button("Visa alla") { run.hidden = [] }
+                }
+                if ute { gruppTrad(p, subs: subs, sti: gs, color: color, indent: indent + 14) }
+            }
+            ForEach(blad) { s in
+                row(id: s.id, name: s.namn, sub: nil, color: color.opacity(0.7), icon: nil, indent: indent)
                     .contextMenu { Button("Visa bara den här") { isolate(s.id) }; Button("Visa alla") { run.hidden = [] } }
             }
-        }
+        })
+    }
+
+    private func isolera(_ del: String, _ kroppar: [String]) {
+        var all = Set(run.parts.map(\.id) + ["skanning"])
+        for (_, subs) in run.underObjekt { all.formUnion(subs.map(\.id)) }
+        all.remove(del)
+        all.subtract(kroppar)
+        run.hidden = all
     }
 
     private func row(id: String, name: String, sub: String?, color: Color, icon: String?, indent: CGFloat, renamable: Bool = false) -> some View {
@@ -271,7 +323,31 @@ struct ScrollIfNeeded<C: View>: View {
     let limit: Int
     @ViewBuilder var content: () -> C
     var body: some View {
-        if rows > limit { ScrollView { content() }.frame(height: 420) } else { content() }
+        if rows > limit { TunnRullning(hojd: 420) { content() } } else { content() }
+    }
+}
+
+/// Rullning med en tunn linje längs högerkanten i stället för macOS-rullningslisten (som lägger sig över ögonen).
+struct TunnRullning<C: View>: View {
+    let hojd: CGFloat
+    @ViewBuilder var content: () -> C
+    @State private var geo = CGRect.zero          // y = hur långt ner, height = innehållets höjd
+    var body: some View {
+        ScrollView { content().padding(.trailing, 5) }
+            .scrollIndicators(.never)
+            .onScrollGeometryChange(for: CGRect.self) { g in
+                CGRect(x: 0, y: g.contentOffset.y, width: 0, height: g.contentSize.height)
+            } action: { _, ny in geo = ny }
+            .frame(height: hojd)
+            .overlay(alignment: .topTrailing) {
+                if geo.height > hojd {
+                    let del = hojd / geo.height
+                    let h = max(24, hojd * del)
+                    let y = min(hojd - h, max(0, geo.minY / max(1, geo.height - hojd) * (hojd - h)))
+                    Capsule().fill(Color.secondary.opacity(0.45)).frame(width: 2, height: h)
+                        .offset(x: -1, y: y).allowsHitTesting(false)
+                }
+            }
     }
 }
 
