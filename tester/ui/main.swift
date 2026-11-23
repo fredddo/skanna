@@ -118,3 +118,10 @@ func avsluta() {
 
 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { nasta() }
 app.run()
+
+extension NSColor {
+    var hexText: String? {
+        guard let c = usingColorSpace(.sRGB) else { return nil }
+        return String(format: "#%02X%02X%02X", Int(round(c.redComponent * 255)), Int(round(c.greenComponent * 255)), Int(round(c.blueComponent * 255)))
+    }
+}

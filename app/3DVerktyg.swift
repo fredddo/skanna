@@ -52,12 +52,6 @@ extension ModelView.Coordinator {
     }
 
     /// Kroppens färg: delens färg, med varannan kropp lite ljusare/mörkare.
-    static func bodyColor(_ base: NSColor, _ k: Int) -> NSColor {
-        guard k > 0 else { return base }
-        let step = 0.13 * Double((k + 1) / 2)
-        return k % 2 == 1 ? (base.blended(withFraction: CGFloat(step), of: .white) ?? base) : (base.blended(withFraction: CGFloat(step), of: .black) ?? base)
-    }
-
     func isVisible(_ n: SCNNode) -> Bool {
         var x: SCNNode? = n
         while let y = x { if y.isHidden { return false }; x = y.parent }
@@ -753,14 +747,13 @@ extension ModelView.Coordinator {
 
     func applyColors(_ specs: [PartSpec]) {
         var changed = false
-        for s in specs where specColors[s.id] != s.color {
-            specColors[s.id] = s.color
-            var k = 0
-            for leaf in leaves.values.filter({ $0.del == s.id }).sorted(by: { $0.id < $1.id }) {
-                let c = ModelView.Coordinator.bodyColor(s.color, k)
+        for s in specs where specColors[s.id] != s {
+            specColors[s.id] = s
+            for leaf in leaves.values.filter({ $0.del == s.id }) {
+                let egen = leaf.body.flatMap { n in partData[s.id]?.bodies.first { $0.n == n }?.farg }
+                let c = s.kroppsfarg(leaf.body ?? 0, egen: egen)
                 leaf.mat.diffuse.contents = c
                 leaf.edgeMat.diffuse.contents = c.blended(withFraction: 0.35, of: .black) ?? c
-                k += 1
             }
             changed = true
         }
@@ -822,7 +815,7 @@ extension ModelView.Coordinator {
             uo[del] = pd.bodies.map { UnderObjekt(id: "\(del)#\($0.n)", del: del, namn: $0.namn, ytor: $0.ytor) }
         }
         run.underObjekt = uo
-        specColors = Dictionary(uniqueKeysWithValues: specs.map { ($0.id, $0.color) })
+        specColors = Dictionary(uniqueKeysWithValues: specs.map { ($0.id, $0) })
         layoutKey = ""; matKey = ""; hoverEdgeKey = ""; selEdgeKey = ""
         if let t = run.traff, let del = t.del, del != "skanning", leaves[t.objekt ?? del] == nil { commit(nil, nil, part: nil) }
         syncTools(parts: specs)

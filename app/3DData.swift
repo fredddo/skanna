@@ -36,6 +36,7 @@ struct BodyData {
     let n: Int                 // kropp-index (id i "<del>#<n>")
     var namn: String
     var volym: Double?
+    var farg: String? = nil    // kroppens egen färg ur ytor.json (t.ex. från Fusion)
     var ytor: [Int]
     var lo: V3
     var hi: V3
@@ -56,7 +57,7 @@ func loadPartData(_ url: URL) -> PartData? {
     struct F: Decodable { let id: Int; let typ: String; let area: Double?; let centrum: [Double]?; let normal: [Double]?
         let radie: Double?; let kropp: Int?; let v: [Float]; let t: [Int32] }
     struct E: Decodable { let id: Int; let typ: String?; let langd: Double?; let radie: Double?; let centrum: [Double]?; let p: [Float]; let ytor: [Int]? }
-    struct K: Decodable { let id: Int; let namn: String?; let volym: Double? }
+    struct K: Decodable { let id: Int; let namn: String?; let volym: Double?; let farg: String? }
     struct Root: Decodable { let ytor: [F]; let kanter: [E]?; let kroppar: [K]? }
     guard let data = try? Data(contentsOf: url), let root = try? JSONDecoder().decode(Root.self, from: data) else { return nil }
     func vec(_ a: [Double]?) -> V3? { a.flatMap { $0.count == 3 ? V3(Float($0[0]), Float($0[1]), Float($0[2])) : nil } }
@@ -107,7 +108,7 @@ func loadPartData(_ url: URL) -> PartData? {
     var bodies: [Int: BodyData] = [:]
     for id in pd.order {
         let f = pd.faces[id]!
-        var b = bodies[f.kropp] ?? BodyData(n: f.kropp, namn: named[f.kropp]?.namn ?? "Kropp \(f.kropp + 1)", volym: named[f.kropp]?.volym, ytor: [],
+        var b = bodies[f.kropp] ?? BodyData(n: f.kropp, namn: named[f.kropp]?.namn ?? "Kropp \(f.kropp + 1)", volym: named[f.kropp]?.volym, farg: named[f.kropp]?.farg, ytor: [],
                                            lo: V3(repeating: .infinity), hi: V3(repeating: -.infinity))
         b.ytor.append(id)
         for p in f.v { b.lo = simd_min(b.lo, p); b.hi = simd_max(b.hi, p) }

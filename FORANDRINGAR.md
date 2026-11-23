@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Färgscheman färgar varje kropp:** i en del med många kroppar (t.ex. en importerad Fusion-sammanställning) tar
+  kropparna var sin färg ur schemat (Skog, Hav …) i stället för att tonas mot vitt/svart. **Delarnas egna färger** visar
+  kropparnas färger från Fusion (STEP-importen läser dem nu); kroppar utan färg tonas lätt i delens färg.
 - **STEP-import behåller namnen från Fusion:** kropparna (lagren i objektträdet) heter som i Fusion – kroppens eget namn
   (t.ex. "Tallrik 3"), annars komponentens. Samma namn flera gånger (likadana komponenter) får (1), (2) …; "Kropp N"
   bara när filen saknar namn. Gäller nästa bygge av ett importerat projekt (⌘B).

@@ -122,6 +122,22 @@ enum Scenarier {
             kolla(abs(c.dist - dist) > 1e-4 && abs(c.yaw - yaw) < 1e-5, "musläget: två fingrar zoomar som förut")
         }]),
 
+        s("Färgschemat färgar varje kropp, aldrig vitt eller svart", [
+            .gor { run.fargschema = .skog }, .vanta(0.5), .gor {
+                guard let (_, c) = vy() else { return }
+                let skog = Set(Fargschema.skog.farger.compactMap { NSColor(hex: $0)?.hexText })
+                let f = c.leaves.values.filter { $0.del == "fotter" }.compactMap { ($0.mat.diffuse.contents as? NSColor)?.hexText }
+                kolla(f.count == 4 && f.allSatisfy { skog.contains($0) }, "fötterna ska ha Skogs färger, har \(f)")
+                kolla(Set(f).count == 4, "fötterna ska få olika färger ur schemat")
+            },
+            .gor { run.fargschema = .egna }, .vanta(0.5), .gor {
+                guard let (_, c) = vy() else { return }
+                let f = c.leaves.values.filter { $0.del == "fotter" }.compactMap { $0.mat.diffuse.contents as? NSColor }
+                kolla(f.allSatisfy { let r = $0.usingColorSpace(.sRGB)!; let l = (r.redComponent + r.greenComponent + r.blueComponent) / 3; return l > 0.05 && l < 0.95 },
+                      "egna färger utan kroppsfärg ska inte bli vitt/svart")
+            },
+        ]),
+
         s("Sprängvy håller ihop hopfällda delar", [
             .gor { run.explode = 1 }, .vanta(0.8), .gor {
                 guard let (_, c) = vy() else { return }

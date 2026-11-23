@@ -59,8 +59,8 @@ def las_step(prj, fil):
 
 
 def las_step_med_namn(fil):
-    """Läs en STEP-fil med kropparnas namn (t.ex. från Fusion). Returnerar (Compound, namn per kropp i
-    .solids()-ordning). Namnet är kroppens eget (MANIFOLD_SOLID_BREP) om det finns, annars komponentens
+    """Läs en STEP-fil med kropparnas namn och färger (t.ex. från Fusion). Returnerar (Compound, namn per kropp i
+    .solids()-ordning, färg "#RRGGBB" per kropp eller None). Namnet är kroppens eget (MANIFOLD_SOLID_BREP) om det finns, annars komponentens
     (NEXT_ASSEMBLY_USAGE_OCCURRENCE / PRODUCT); None om inget av dem finns eller bara är en Fusion-tidsstämpel."""
     import re
     from build123d import Compound
@@ -75,10 +75,17 @@ def las_step_med_namn(fil):
     from OCP.TopAbs import TopAbs_SOLID
     from OCP.TopExp import TopExp_Explorer
     from OCP.TopLoc import TopLoc_Location
+    from OCP.Quantity import Quantity_ColorRGBA
+    from OCP.XCAFDoc import XCAFDoc_ColorTool, XCAFDoc_ColorGen, XCAFDoc_ColorSurf, XCAFDoc_ColorCurv
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
 
     doc = TDocStd_Document(TCollection_ExtendedString("XCAF"))
     st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
+    ct = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
     r = STEPCAFControl_Reader()
+    r.SetColorMode(True)
     Interface_Static.SetIVal_s("read.stepcaf.subshapes.name", 1)   # kroppsnamn i en komponent → egna etiketter
     r.SetNameMode(True)
     if r.ReadFile(str(fil)) != 1 or not r.Transfer(doc):
@@ -92,6 +99,38 @@ def las_step_med_namn(fil):
                 return n
         return None
 
+    def hexfarg(c):
+        rgb = c.GetRGB()
+        # STEP-färger är linjära (sRGB-omvandlas av OCCT) – Values(TOC_sRGB) ger det Fusion visar
+        from OCP.Quantity import Quantity_TypeOfColor
+        r_, g_, b_ = rgb.Values(Quantity_TypeOfColor.Quantity_TOC_sRGB)
+        return "#%02X%02X%02X" % tuple(max(0, min(255, round(v * 255))) for v in (r_, g_, b_))
+
+    def etikettfarg(l):
+        c = Quantity_ColorRGBA()
+        for t in (XCAFDoc_ColorSurf, XCAFDoc_ColorGen, XCAFDoc_ColorCurv):
+            if XCAFDoc_ColorTool.GetColor_s(l, t, c):
+                return hexfarg(c)
+        return None
+
+    def formfarg(sh):
+        """Formens egen färg, annars färgen på dess största yta."""
+        c = Quantity_ColorRGBA()
+        for t in (XCAFDoc_ColorSurf, XCAFDoc_ColorGen):
+            if ct.GetColor(sh, t, c):
+                return hexfarg(c)
+        bast, storst = None, -1.0
+        e = TopExp_Explorer(sh, TopAbs_FACE)
+        while e.More():
+            f = e.Current()
+            if ct.GetColor(f, XCAFDoc_ColorSurf, c) or ct.GetColor(f, XCAFDoc_ColorGen, c):
+                g = GProp_GProps()
+                BRepGProp.SurfaceProperties_s(f, g)
+                if g.Mass() > storst:
+                    bast, storst = hexfarg(c), g.Mass()
+            e.Next()
+        return bast
+
     egna = {}                               # TShape → kroppens eget namn
     alla = Sequence_TDF_Label()
     st.GetShapes(alla)
@@ -103,34 +142,38 @@ def las_step_med_namn(fil):
             if sh.ShapeType() == TopAbs_SOLID and namn(sub.Value(j)):
                 egna[hash(sh.TShape())] = namn(sub.Value(j))
 
-    delar, namnen = [], []
+    delar, namnen, fargerna = [], [], []
 
-    def gå(l, loc, komp):
+    def gå(l, loc, komp, kompfarg=None):
         ref = l
         if st.IsReference_s(l):
             ref = TDF_Label()
             st.GetReferredShape_s(l, ref)
         L = loc.Multiplied(st.GetLocation_s(l))
         k = namn(ref) or namn(l) or komp
+        kf = etikettfarg(l) or etikettfarg(ref) or kompfarg
         if st.IsAssembly_s(ref):
             sub = Sequence_TDF_Label()
             st.GetComponents_s(ref, sub)
             for i in range(1, sub.Length() + 1):
-                gå(sub.Value(i), L, k)
+                gå(sub.Value(i), L, k, kf)
             return
         sh = st.GetShape_s(ref)
         sub = Sequence_TDF_Label()
         st.GetSubShapes_s(ref, sub)
-        under = [(st.GetShape_s(sub.Value(j)), namn(sub.Value(j))) for j in range(1, sub.Length() + 1)]
-        under = [(u, n) for u, n in under if n and u.ShapeType() == TopAbs_SOLID]
+        under = [(st.GetShape_s(sub.Value(j)), namn(sub.Value(j)), etikettfarg(sub.Value(j)))
+                 for j in range(1, sub.Length() + 1)]
+        under = [(u, n, f) for u, n, f in under if u.ShapeType() == TopAbs_SOLID]
         e = TopExp_Explorer(sh, TopAbs_SOLID)
         hittade = False
         while e.More():
             s = e.Current()
             hittade = True
             delar.append(s.Moved(L))
-            eget = next((n for u, n in under if u.IsPartner(s)), None) or egna.get(hash(s.TShape()))
+            match = next(((n, f) for u, n, f in under if u.IsPartner(s)), (None, None))
+            eget = match[0] or egna.get(hash(s.TShape()))
             namnen.append(eget or k)
+            fargerna.append(match[1] or formfarg(s) or kf)
             e.Next()
         if not hittade and not sh.IsNull():
             delar.append(sh.Moved(L))      # ytor/skal utan kropp: med i formen, men ingen kropp att namnge
@@ -147,7 +190,9 @@ def las_step_med_namn(fil):
         b.Add(tc, d)
     c = Compound(tc)
     if len(c.solids()) != len(namnen):
-        return c, None
+        return c, None, None
+    if not any(fargerna):
+        fargerna = None
     # Samma namn flera gånger (t.ex. tre likadana fjäderpaket): numrera, så att lagren går att skilja åt
     antal, sedda = {}, {}
     for n in namnen:
@@ -158,7 +203,7 @@ def las_step_med_namn(fil):
             sedda[n] = sedda.get(n, 0) + 1
             n = f"{n} ({sedda[n]})"
         ut.append(n)
-    return c, ut
+    return c, ut, fargerna
 
 
 def importera(prj, pid, namn, fil, roll="design", farg="#8E8E93", beskrivning=None, utskrift=True):
@@ -182,10 +227,10 @@ def importera(prj, pid, namn, fil, roll="design", farg="#8E8E93", beskrivning=No
 def _step(prj, pid, namn, src, P, roll, farg, text, utskrift):
     from build123d import Axis, Location
     try:
-        s, kropp_namn = las_step_med_namn(src)
+        s, kropp_namn, kropp_farger = las_step_med_namn(src)
     except Exception as e:                  # reserv: build123d:s läsare (utan kroppsnamn)
         print(f"Varning: kroppsnamnen gick inte att läsa ({e}) – kropparna heter Kropp 1, 2 …", flush=True)
-        s, kropp_namn = las_step(prj, src.relative_to(prj.cad)), None
+        s, kropp_namn, kropp_farger = las_step(prj, src.relative_to(prj.cad)), None, None
     if abs(P["skala"] - 1) > 1e-9:
         s = s.scale(P["skala"])
     for ax, axis in (("x", Axis.X), ("y", Axis.Y), ("z", Axis.Z)):
@@ -201,7 +246,7 @@ def _step(prj, pid, namn, src, P, roll, farg, text, utskrift):
     if kropp_namn:
         print(f"{sum(1 for n in kropp_namn if n)} av {len(kropp_namn)} kroppar har namn från filen", flush=True)
     prj.del_(pid, namn, s, roll=roll, farg=farg, beskrivning=text, utskrift=utskrift and bool(s.solids()),
-             kropp_namn=kropp_namn)
+             kropp_namn=kropp_namn, kropp_farger=kropp_farger)
 
 
 # ---- STL / 3MF / OBJ ---------------------------------------------------------------------------------------------

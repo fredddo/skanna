@@ -69,7 +69,7 @@ def _tessellera(f, tolerance, angular):
     return [], []
 
 
-def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=None):
+def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=None, kropp_farger=None):
     """kropp_namn: valfri lista med namn per kropp (i solid.solids()-ordning), t.ex. Fusion-namnen ur en STEP."""
     faces = list(solid.faces())
     fidx = {hash(f): i for i, f in enumerate(faces)}
@@ -78,11 +78,15 @@ def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=Non
     solider = list(solid.solids())
     if kropp_namn is not None and len(kropp_namn) != len(solider):
         kropp_namn = None                      # t.ex. kantbehandling har ändrat kropparna – namnen går inte att lita på
+    if kropp_farger is not None and len(kropp_farger) != len(solider):
+        kropp_farger = None
     for k, s in enumerate(solider):
         bb = s.bounding_box()
         kroppar.append({"id": k, "namn": (kropp_namn and kropp_namn[k]) or f"Kropp {k + 1}", "volym": round(s.volume, 2),
                         "min": [round(bb.min.X, 3), round(bb.min.Y, 3), round(bb.min.Z, 3)],
                         "max": [round(bb.max.X, 3), round(bb.max.Y, 3), round(bb.max.Z, 3)]})
+        if kropp_farger and kropp_farger[k]:
+            kroppar[-1]["farg"] = kropp_farger[k]
         for f in s.faces():
             kropp_av[fidx.get(hash(f))] = k
     ytor = []

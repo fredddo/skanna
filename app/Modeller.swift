@@ -216,7 +216,20 @@ struct ProjektPost: Identifiable, Hashable {
 }
 
 /// En del i 3D-vyn: CAD-ytor (json) eller STL, med färg.
-struct PartSpec: Equatable { let id: String; let url: URL; let color: NSColor; let stamp: Date }
+struct PartSpec: Equatable {
+    let id: String; let url: URL; let color: NSColor; let stamp: Date
+    var palett: [NSColor] = []       // färgschemats färger, roterade så att delen börjar på sin egen – kropparna tar var sin
+    var egna = false                 // "Delarnas egna färger": kroppar med egen färg (t.ex. från Fusion) visas i den
+    /// Färgen för kropp n i delen.
+    func kroppsfarg(_ n: Int, egen: String? = nil) -> NSColor {
+        if egna, let e = egen.flatMap(NSColor.init(hex:)) { return e }
+        if n == 0 { return color }
+        if !palett.isEmpty { return palett[n % palett.count] }
+        // Allt grått / egna utan kroppsfärger: växla ljusare/mörkare, men aldrig mot vitt/svart
+        let steg = 0.12 * Double(((n + 1) / 2 - 1) % 3 + 1)
+        return n % 2 == 1 ? (color.blended(withFraction: steg, of: .white) ?? color) : (color.blended(withFraction: steg, of: .black) ?? color)
+    }
+}
 
 struct ViewRequest: Equatable { let name: String; let id = UUID() }
 

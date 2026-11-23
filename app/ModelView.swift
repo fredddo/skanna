@@ -599,7 +599,7 @@ struct ModelView: NSViewRepresentable {
         var knownSelectedPart: String?
         var handledTraff: Traff?
         var selectedLeaf: String?
-        var specColors: [String: NSColor] = [:]
+        var specColors: [String: PartSpec] = [:]
         var asmCenter = V3(0, 0, 0)
         let rit = RitTillstand()             // Rita.swift
         var cursorKey = ""
@@ -949,7 +949,7 @@ struct ModelView: NSViewRepresentable {
                             let leafId = multi ? "\(spec.id)#\(b)" : spec.id
                             let group: SCNNode
                             if multi { group = SCNNode(); group.name = "obj-\(leafId)"; node.addChildNode(group) } else { group = node }
-                            let color = Coordinator.bodyColor(spec.color, k)
+                            let color = spec.kroppsfarg(multi ? b : 0, egen: pdata?.bodies.first(where: { $0.n == b })?.farg)
                             let m = Coordinator.makeMaterial(color)
                             let edgeMat = SCNMaterial()
                             edgeMat.diffuse.contents = color.blended(withFraction: 0.35, of: .black) ?? color

@@ -305,7 +305,10 @@ final class Runner: ObservableObject {
         return parts.compactMap { p in
             let u = folder.appendingPathComponent(p.fil)
             guard let d = (try? FileManager.default.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date else { return nil }
-            return PartSpec(id: p.id, url: u, color: color(for: p), stamp: d)
+            let f = fargschema.farger.compactMap(NSColor.init(hex:))
+            let i = parts.firstIndex(where: { $0.id == p.id }) ?? 0
+            let palett = f.count > 1 ? (0..<f.count).map { f[(i + $0) % f.count] } : []
+            return PartSpec(id: p.id, url: u, color: color(for: p), stamp: d, palett: palett, egna: fargschema == .egna)
         }
     }
 
