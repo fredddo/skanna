@@ -148,6 +148,17 @@ struct Workspace: View {
                     .padding(.trailing, 8 + 132 + 6)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
+            if let o = run.ortoVy, run.snapped == nil {
+                // lapp under vykuben: rak vy, ortografisk; försvinner när man vrider
+                Label("\(o) · ortografisk", systemImage: "square.dashed")
+                    .font(.caption).padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Capsule().fill(.regularMaterial))
+                    .overlay(Capsule().stroke(Color.secondary.opacity(0.25)))
+                    .tips("Rak vy utan perspektiv – parallella kanter förblir parallella. Vrid vyn så blir det perspektiv igen.")
+                    .padding(.top, 8 + 132 + 2).padding(.trailing, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .transition(.opacity)
+            }
             if run.snapped != nil {
                 Button { run.request("lämna-foto"); followPhotos = false } label: { Label("Lämna fotoläget", systemImage: "xmark.circle.fill") }
                     .keyboardShortcut(.escape, modifiers: [])

@@ -53,6 +53,10 @@ struct ModelView: NSViewRepresentable {
         /// Kamerans upp-riktning. U i standardvyerna; när man vrider upp/ner följer den med (inget stopp – man kan
         /// snurra över toppen, då är modellen upp och ner). ⌘0, kubens sidor och ⌘1–⌘7 rätar upp vyn igen.
         var upp = SIMD3<Float>(0, 0, -1)
+        /// Raka vyer (kubens sidor, ⌘1–⌘6) visas ortografiskt – en sidovy är då helt platt. Vrider man går vyn tillbaka
+        /// till perspektiv. `onOrto` visar/döljer lappen vid kuben.
+        var orto: String? { didSet { if orto != oldValue { onOrto?(orto) } } }
+        var onOrto: ((String?) -> Void)?
         func dir(_ y: Float, _ p: Float) -> SIMD3<Float> { cos(p) * (cos(y) * E1 + sin(y) * E2) + sin(p) * U }
         func applyCamera(animated: Bool) {
             guard let pov = view?.pointOfView else { return }
@@ -60,6 +64,12 @@ struct ModelView: NSViewRepresentable {
             SCNTransaction.animationDuration = animated ? 0.35 : 0
             pov.simdPosition = target + dir(yaw, pitch) * dist
             pov.simdLook(at: target, up: upp, localFront: [0, 0, -1])
+            if snapped == nil, let cam = pov.camera {
+                // ortografiskt: samma bildhöjd som perspektivet på målpunktens avstånd, så att inget hoppar i storlek
+                cam.usesOrthographicProjection = orto != nil
+                if orto != nil { cam.orthographicScale = Double(dist * tan(Float(17 * Double.pi / 180))) }
+            }
+            vridKub(pov.simdWorldOrientation)
             SCNTransaction.commit()
         }
         func syncFromPov() {
@@ -77,6 +87,7 @@ struct ModelView: NSViewRepresentable {
         func orbit(_ dx: CGFloat, _ dy: CGFloat) {
             if follow, snapped != nil { scrub(dx); return }   // fotoläge: spola i videon
             leavePhoto()
+            orto = nil                                        // vridning: tillbaka till perspektiv
             let q = valtCentrum()?.0 ?? center
             let C = target + dir(yaw, pitch) * dist
             let d = simd_normalize(C - target)
@@ -185,7 +196,7 @@ struct ModelView: NSViewRepresentable {
         }
         func fitView() {
             leavePhoto()
-            target = center; dist = fitDistance(); upp = U
+            target = center; dist = fitDistance(); upp = U; orto = nil
             applyCamera(animated: true)
         }
         /// Klick inne i vykuben ska bara gå till kuben, inte bli en nål i modellen.
@@ -285,11 +296,21 @@ struct ModelView: NSViewRepresentable {
         /// Vykuben följer huvudkamerans vridning varje bildruta.
         func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
             guard let pov = renderer.pointOfView else { return }
-            let o = pov.simdWorldOrientation
-            cubeCam.simdOrientation = o
-            cubeCam.simdPosition = simd_act(o, SIMD3<Float>(0, 0, 6))
+            // kuben ritas av sin egen vy: ändringen görs på huvudtråden, annars märker kubens vy den inte alltid
+            // (då stod kuben kvar i en gammal vy medan modellen vreds)
+            let o = pov.presentation.simdWorldOrientation
+            if simd_length(o.vector - kubSenast.vector) > 1e-5 {
+                kubSenast = o
+                DispatchQueue.main.async { [weak self] in self?.vridKub(o) }
+            }
             updateOverlayScale()
             ritTona()
+        }
+        var kubSenast = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+        func vridKub(_ o: simd_quatf) {
+            cubeCam.simdOrientation = o
+            cubeCam.simdPosition = simd_act(o, SIMD3<Float>(0, 0, 6))
+            cubeView?.needsDisplay = true
         }
         // --- foton
         var photos: [FotoInfo] = []
@@ -360,6 +381,7 @@ struct ModelView: NSViewRepresentable {
                 imageOrder.append(key)
                 if imageOrder.count > 40 { images[imageOrder.removeFirst()] = nil }
             }
+            orto = nil
             pov.camera = photoCamera(f, view: v.bounds.size)
             SCNTransaction.begin()
             SCNTransaction.animationDuration = animated ? 0.35 : 0
@@ -481,6 +503,8 @@ struct ModelView: NSViewRepresentable {
             // så att kubens text står rätt
             if name == "Topp" { pitch = .pi / 2; upp = SIMD3<Float>(0, 1, 0) }
             if name == "Botten" { pitch = -.pi / 2; upp = SIMD3<Float>(0, -1, 0) }
+            let rakt = ["Topp": "Uppifrån", "Botten": "Underifrån", "+X": "Från +X", "−X": "Från −X", "+Y": "Från +Y", "−Y": "Från −Y"]
+            orto = follow ? nil : rakt[name]
             if follow, let f = nearest(from: dir(y, p), maxAngle: 180) {
                 applyCamera(animated: false); snap(f, animated: true); noteAngle(f, dir(y, p)); return
             }
@@ -672,6 +696,7 @@ struct ModelView: NSViewRepresentable {
                 return
             }
             if snapped != nil { unsnap() }
+            orto = nil; view?.pointOfView?.camera?.usesOrthographicProjection = false
             if s.mal.count == 3 { target = SIMD3(Float(s.mal[0]), Float(s.mal[1]), Float(s.mal[2])) }
             guard s.kamera.count == 16, let pov = view?.pointOfView else { return }
             let f = s.kamera.map { Float($0) }
@@ -848,6 +873,7 @@ struct ModelView: NSViewRepresentable {
         c.folder = photoFolder
         c.updateDots()
         c.onNote = onNote
+        if c.onOrto == nil { c.onOrto = { [weak run] t in DispatchQueue.main.async { if run?.ortoVy != t { run?.ortoVy = t } } } }
         c.onFollowChange = onFollowChange
         if c.follow != followPhotos {
             c.follow = followPhotos

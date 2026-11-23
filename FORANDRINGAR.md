@@ -6,6 +6,9 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Raka vyer är ortografiska:** klick på kubens sidor (och ⌘1–⌘6) ger en vy utan perspektiv – en sidovy är helt platt.
+  En lapp under kuben säger "Från +X · ortografisk"; vrider du blir det perspektiv igen och lappen försvinner.
+- **Kuben följer modellen igen:** den kunde stå kvar i en gammal vy medan modellen vreds.
 - **Chatten säger till när Claude inte svarar:** har dina meddelanden väntat över 3 minuter utan att Claude arbetar,
   visar raden överst "Inget svar på N meddelanden – lyssnar Claude?" med knappen **Kopiera påminnelse** (klistra in i
   chatten med Claude). Frågar Claude i den översta raden utan att frågan hör till en tråd går raden nu att klicka på:
