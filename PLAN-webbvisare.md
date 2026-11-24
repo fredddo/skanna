@@ -140,8 +140,8 @@ innehållet: visaren krypterar kommentarerna med delningens nyckel (samma SKD1-f
     `dela.py --aterkalla <id> <projekt>`, `dela.py --ta-emot <länk> <projekt>`.
   - Inställningar (mapp och bas-URL) i `~/.config/skanna/delning.json`; saknas de används
     `<Skanna-hem>/delat/` och motorns lokala adress (förhandsvisning).
-  - **Publicering** är ett eget, uttryckligt steg (`dela.py --publicera`: `git add/commit/push` i `delat_mapp` om den är
-    ett git-repo). Körs aldrig automatiskt och aldrig av en agent utan användarens ja.
+  - **Publicering** är ett eget, uttryckligt steg (`dela.py --publicera`: en enda commit utan historik som tvingas
+    upp i `delat_mapp` om den är ett git-repo – en återkallad delning ska inte ligga kvar i historiken). Körs aldrig automatiskt och aldrig av en agent utan användarens ja.
 - Motorn (`motor/server.py`):
   - `POST /v1/dela {projekt, med, fran}` → `{id, lank, lokal_lank}`; `POST /v1/dela/aterkalla {projekt, id}`;
     `GET /v1/delningar?projekt=`; `POST /v1/kommentarer {projekt, lank}` (svarslänk);

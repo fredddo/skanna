@@ -13,3 +13,5 @@ __pycache__/
 /tester/.bygg/
 # krypterade delningar och en kopia av visaren (cad/dela.py) – publiceras från en egen mapp, aldrig härifrån
 /delat/
+# wranglers cache (Cloudflare) om brevlådan driftsätts härifrån
+.wrangler/

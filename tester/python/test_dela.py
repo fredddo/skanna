@@ -209,6 +209,29 @@ class Paket(unittest.TestCase):
         with self.assertRaises(dela.DelaFel):
             dela.aterkalla(self.p, None, "../x")
 
+    def test_publicera_lamnar_ingen_historik(self):
+        """Publiceringen är en enda commit: en återkallad delning ska inte gå att hämta ur repots historik."""
+        import subprocess
+
+        def git(*a, i):
+            return subprocess.run(["git", "-C", str(i), *a], check=True, capture_output=True, text=True).stdout.strip()
+
+        fjarr = self.env.m / "fjarr.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(fjarr)], check=True)
+        self.env.delat.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", str(self.env.delat)], check=True)
+        for k, v in (("user.name", "Test"), ("user.email", "test@exempel.test")):
+            git("config", k, v, i=self.env.delat)
+        git("remote", "add", "origin", str(fjarr), i=self.env.delat)
+        r = dela.dela(self.p)
+        self.assertEqual(dela.publicera(), "publicerat")
+        self.assertIn(f"d/{r['id']}.skd", git("ls-tree", "-r", "--name-only", "main", i=fjarr))
+        dela.aterkalla(self.p, None, r["id"])
+        self.assertEqual(dela.publicera(), "publicerat")
+        self.assertEqual(git("rev-list", "--count", "main", i=fjarr), "1")
+        self.assertNotIn(r["id"], git("ls-tree", "-r", "--name-only", "main", i=fjarr))
+        self.assertEqual(dela.publicera(), "inget nytt att publicera")
+
     def test_svarslank_till_kommentarer_utan_dubbletter(self):
         r = dela.dela(self.p)
         innehall = {"fran": "Anna", "kommentarer": [

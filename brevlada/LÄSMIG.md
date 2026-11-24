@@ -115,3 +115,10 @@ Nya delningar får då en brevlåda (`<brevlada_url>/b/<id>`). Utan `brevlada_ur
 BREVLADA_HEMLIG=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))") python3 server.py --port 8787 --mapp /tmp/brev
 cd tester/python && ../../.venv/bin/python -m unittest test_brevlada -v
 ```
+
+## Bra att veta
+- **Cloudflare KV visar nya brev med fördröjning.** Ett brev som just skickats kan dröja upp till någon minut innan
+  det syns när Skanna hämtar kommentarer. Hämta igen om ett väntat brev saknas.
+- **Publiceringen skriver över historiken.** `dela.py --publicera` lägger en enda commit och tvingar upp den, så att en
+  återkallad delning inte ligger kvar i repots historik.
+

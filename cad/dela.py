@@ -597,8 +597,12 @@ def publicera(delat_mapp_=None) -> str:
     git("add", "-A", "--", "d", "visare")
     if git("diff", "--cached", "--quiet", kontroll=False).returncode == 0:
         return "inget nytt att publicera"
-    git("commit", "-m", "Uppdatera delningar")
-    git("push")
+    # En enda commit utan historik, tvingad upp: en återkallad delning ska inte gå att hämta ur gamla commits.
+    trad = git("write-tree").stdout.decode().strip()
+    commit = git("commit-tree", trad, "-m", "Delningar").stdout.decode().strip()
+    gren = git("symbolic-ref", "--short", "HEAD").stdout.decode().strip()
+    git("update-ref", f"refs/heads/{gren}", commit)
+    git("push", "--force", "origin", gren)
     return "publicerat"
 
 
