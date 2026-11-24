@@ -6,6 +6,20 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Skanna-motorn (24 nov, steg 1 i `PLAN-motor.md`):** appen startar en liten lokal tjänst (`motor/`, Python i
+  Skanna-hemmet) och skickar meddelanden, mått, fillet/fas, utskriftsinställningar, ångra och byggen genom den. Allt
+  skrivs atomiskt under projektets lås, och ett bygge i taget per projekt (appens och Claudes byggen väntar på varandra).
+  Förberedelse för ett webbgränssnitt som också fungerar på surfplattan. Rättat samtidigt:
+  - en trasig rad i `svar.json` tömmer inte längre chatten, och ett nytt meddelande skriver inte över samtalet;
+  - en tråd som Claude läst men arbetar med visas inte längre som klar;
+  - Claudes svar utan `--svar-pa` hamnar inte längre i en slumpvis tråd, och två meddelanden samma sekund krockar inte;
+  - `bevaka.sh` missar inte meddelanden som kom medan Claude arbetade;
+  - `foralder` (t.ex. insatsen under lådan) försvinner inte vid nästa bygge;
+  - ett skript med flera måttgrupper får inte längre dubblerade mått;
+  - måttrutan: "−12,5" blir −12,5 (förut +12,5), 22,5° visas och förifylls som 22,5 (förut 23), och text som inte är
+    ett tal avvisas;
+  - testinstansen (`bygg-beta.sh --test`) ser bara sina kopior, inte de riktiga skanningarna i Hämtade filer;
+  - byggen fungerar också när terminalen saknar UTF-8 (å/ä/ö i delar.json).
 - **Objektpanelens bredd går att ändra:** dra i panelens högerkant (200–640 punkter, sparas); dubbelklicka på kanten
   för standardbredd.
 - **Komponentträd för importerad STEP:** kropparna visas under sina komponenter som i Fusion (t.ex. fjäderpaket →

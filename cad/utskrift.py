@@ -63,16 +63,28 @@ def _filament(v):
     return {str(k): normalisera(k, x) for k, x in v.items() if x is not None and str(x).strip() != ""}
 
 
-def skriv(cad, delar):
-    path = Path(cad) / FIL
-    try:
-        data = json.loads(path.read_text())
+def skriv(cad, delar, bara=None):
+    """Skriv delarnas inställningar (atomiskt, under projektets lås). bara = id:n som ska ändras (övriga delar i filen
+    lämnas som de är, även om någon annan ändrat dem under tiden); None = ersätt alla."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import lagring
+
+    def andra(data):
         if not isinstance(data, dict):
             data = {}
-    except (OSError, ValueError):
-        data = {}
-    data["delar"] = {pid: s for pid, s in delar.items() if s}
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        gamla = data.get("delar") if isinstance(data.get("delar"), dict) else {}
+        if bara is None:
+            data["delar"] = {pid: s for pid, s in delar.items() if s}
+        else:
+            for pid in bara:
+                if delar.get(pid):
+                    gamla[pid] = delar[pid]
+                else:
+                    gamla.pop(pid, None)
+            data["delar"] = gamla
+        return data
+
+    lagring.uppdatera_json(Path(cad) / FIL, andra, {})
 
 
 def normalisera(k, v):
@@ -179,7 +191,7 @@ def main(argv):
             s[k] = normalisera(k, v)
         i += 1
     delar[pid] = s
-    skriv(cad, delar)
+    skriv(cad, delar, bara=[pid])
     print(json.dumps(s, ensure_ascii=False))
     return 0
 

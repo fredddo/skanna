@@ -23,7 +23,7 @@ steg "1. Skript"
 for f in bygg-beta.sh bevaka.sh bygg_projekt.sh tester/testa.sh ikon/bygg_ikon.sh; do
   zsh -n "$f" 2>"$TMP/sh.txt" && ok "$f" || { nej "$f"; cat "$TMP/sh.txt" }
 done
-"$PY" -m py_compile cad/*.py 2>"$TMP/py.txt" && ok "cad/*.py kompilerar" || { nej "cad/*.py"; cat "$TMP/py.txt" }
+"$PY" -m py_compile cad/*.py motor/*.py 2>"$TMP/py.txt" && ok "cad/*.py och motor/*.py kompilerar" || { nej "cad/*.py, motor/*.py"; cat "$TMP/py.txt" }
 
 steg "2. Appen kompilerar"
 if swiftc -parse-as-library -typecheck app/*.swift 2>"$TMP/sw.txt" && swiftc -parse-as-library -typecheck main.swift 2>>"$TMP/sw.txt"; then

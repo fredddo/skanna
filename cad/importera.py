@@ -486,8 +486,8 @@ def _mesh_ytor(m, path, max_plan=400):
     for k in np.unique(labels[rest]) if len(rest) else []:
         fi = rest[labels[rest] == k]
         ytor.append(_yta(m, fi, len(ytor), "nät", None, labels, delad=True))
-    Path(path).write_text(json.dumps({"ytor": ytor, "kanter": [], "kroppar": kroppar, "kalla": "mesh"},
-                                     separators=(",", ":"), ensure_ascii=False))
+    import lagring
+    lagring.skriv_json(path, {"ytor": ytor, "kanter": [], "kroppar": kroppar, "kalla": "mesh"}, kompakt=True)
     return len(ytor)
 
 

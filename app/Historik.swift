@@ -242,7 +242,7 @@ extension Runner {
         cadStamp = .distantPast
         reloadCad()
         resetUndo()
-        send(questionID: "parameter", question: "Historik",
+        send(questionID: "historik", question: "Historik",
              text: "Gick tillbaka till version \(post.kort) från \(datum) (\"\(post.rubrik)\") i appens historik. Filerna i cad/ är som då, utom samtalet (svar.json, claude.json, bilagor, ritningar). Läs om skripten innan du fortsätter.",
              attachment: nil)
         historikSpara(vanta: true, rubrik: "Tillbaka till \(post.kort) (\(datum)): \(post.rubrik)")

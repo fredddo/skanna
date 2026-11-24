@@ -62,14 +62,14 @@ extension Runner {
     // MARK: Beräkning
 
     /// Alla trådar (aktiva och avslutade), Claudes fristående meddelanden och parameterloggen.
-    func chatThreads(closedLocal: Set<String>) -> (threads: [ChatThread], loose: [ClaudeInfo.Meddelande], log: [Svar]) {
+    func chatThreads(closedLocal: Set<String>) -> (threads: [ChatThread], log: [Svar]) {
         let qs = cad?.fragor ?? []
         let qIDs = Set(qs.map(\.id))
         var userBy: [String: [Svar]] = [:]
         var tidKey: [String: String] = [:]
         var log: [Svar] = []
-        for a in answers.sorted(by: { $0.tid < $1.tid }) {
-            if a.fraga_id == "parameter" { log.append(a); continue }
+        for a in answers.sorted(by: { tidEfter($1.tid, $0.tid) }) {
+            if a.fraga_id == "parameter" || a.fraga_id == "historik" { log.append(a); continue }
             let key: String
             if qIDs.contains(a.fraga_id) {
                 if a.svar.hasPrefix("(stängd av dig") { continue }
@@ -80,7 +80,7 @@ extension Runner {
         }
         for q in qs { tidKey[q.id] = q.id }
         var claudeBy: [String: [ClaudeInfo.Meddelande]] = [:]
-        var pending = (claude?.meddelanden ?? []).sorted { $0.tid < $1.tid }
+        var pending = (claude?.meddelanden ?? []).sorted { tidEfter($1.tid, $0.tid) }
         var changed = true
         while changed {
             changed = false
@@ -94,7 +94,7 @@ extension Runner {
         }
         var keys = Array(userBy.keys)
         for q in qs where userBy[q.id] == nil { keys.append(q.id) }
-        let senasteClaude = (claude?.meddelanden ?? []).map(\.tid).max() ?? ""
+        let senasteClaude = (claude?.meddelanden ?? []).map(\.tid).max { tidEfter($1, $0) } ?? ""
         let claudeArbetarNu = claudeArbetar
         var out: [ChatThread] = []
         for key in keys {
@@ -103,7 +103,7 @@ extension Runner {
             if let q { entries.append(ChatEntry(id: "q" + q.id, tid: "", fromClaude: true, isQuestion: true, text: q.text, svar: nil)) }
             var rest: [ChatEntry] = (userBy[key] ?? []).map { ChatEntry(id: "u" + $0.id, tid: $0.tid, fromClaude: false, isQuestion: false, text: $0.svar, svar: $0) }
             rest += (claudeBy[key] ?? []).map { ChatEntry(id: "c" + $0.tid + String($0.text.hashValue), tid: $0.tid, fromClaude: true, isQuestion: false, text: $0.text, svar: nil) }
-            rest.sort { $0.tid < $1.tid }
+            rest.sort { tidEfter($1.tid, $0.tid) }
             entries += rest
             guard !entries.isEmpty else { continue }
             let isQ = q != nil
@@ -122,13 +122,15 @@ extension Runner {
             //  · ditt meddelande sist, mottaget, Claude har skrivit något senare (var som helst) och kallar tråden klar → klar
             //  · ditt meddelande sist, mottaget, Claude arbetar nu   → arbetar, annars → väntar
             //  · Claudes meddelande sist                           → klar, utom när Claude uttryckligen frågar (fraga)
+            // "last_svar" i geometri.json (äldre skanningar) räknas bara när Claude inte satt någon status på tråden – att
+            // Claude läst ett meddelande betyder inte att tråden är klar.
             let explicit = ChatStatus.parse(claude?.tradar?[key]?.status)
             var status: ChatStatus
             if closedByUser { status = .klar }
             else if !lastEntry.fromClaude, let s = lastEntry.svar {
-                if isRead(s) { status = .klar }
+                if explicit == nil, isRead(s) { status = .klar }
                 else if !isReceived(s) { status = .vantar }
-                else if explicit == .klar, senasteClaude > s.tid { status = .klar }
+                else if explicit == .klar, tidEfter(senasteClaude, s.tid) { status = .klar }
                 else { status = claudeArbetarNu ? .arbetar : .vantar }
             } else if isQ, q?.besvarad != true, !entries.contains(where: { !$0.fromClaude }) { status = .fraga }
             else if explicit == .fraga { status = .fraga }
@@ -152,8 +154,8 @@ extension Runner {
                                   entries: [ChatEntry(id: "c" + m.tid, tid: m.tid, fromClaude: true, isQuestion: false, text: m.text, svar: nil)],
                                   plats: nil, kant: nil, markering: false, closedByUser: false, lastTid: m.tid))
         }
-        out.sort { $0.lastTid > $1.lastTid }
-        return (out, [], (log + skriptMattLogg).sorted { $0.tid < $1.tid })
+        out.sort { tidEfter($0.lastTid, $1.lastTid) }
+        return (out, (log + skriptMattLogg).sorted { tidEfter($1.tid, $0.tid) })
     }
 
     /// Arbetar Claude just nu? claude.json säger "arbetar" och har ändrats den senaste halvtimmen
@@ -197,8 +199,8 @@ extension Runner {
     @discardableResult
     func oppnaClaudesTrad() -> String? {
         let alla = chatThreads(closedLocal: loadClosedThreads()).threads
-        let senast = alla.compactMap { th in th.entries.filter(\.fromClaude).map(\.tid).filter { !$0.isEmpty }.max().map { (th, $0) } }
-            .max { $0.1 < $1.1 }?.0
+        let senast = alla.compactMap { th in th.entries.filter(\.fromClaude).map(\.tid).filter { !$0.isEmpty }.max { tidEfter($1, $0) }.map { (th, $0) } }
+            .max { tidEfter($1.1, $0.1) }?.0
         guard let th = senast else { skrivFokus += 1; return nil }
         if th.closedByUser { setThreadClosed(th.id, false) }
         fokusTrad = th.id

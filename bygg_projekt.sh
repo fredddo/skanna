@@ -4,8 +4,14 @@
 set -e
 HEM="${SKANNA_HEM:-$(cd "$(dirname "$0")" && pwd)}"
 export SKANNA_HEM="$HEM"
+export PYTHONUTF8=1   # skripten läser/skriver JSON med å/ä/ö oavsett terminalens locale
 P="${1:?projektmapp}"
 PY="$HEM/.venv/bin/python"
+# Ett bygge i taget per projekt (appen och Claude kan bygga samtidigt): kör om skriptet med projektets bygglås.
+if [[ -z "$SKANNA_BYGGLAS" && -x "$PY" ]]; then
+  export SKANNA_BYGGLAS=1
+  exec "$PY" "$HEM/cad/las.py" "$P" bygg -- /bin/zsh "$0" "$@"
+fi
 if [[ -x "$P/cad/bygg.sh" ]]; then exec "$P/cad/bygg.sh" "$P"; fi
 setopt null_glob
 skript=("$P"/cad/skript/*.py)

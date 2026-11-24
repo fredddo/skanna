@@ -16,7 +16,7 @@ Ett projekt är en mapp. Två slags projekt, samma struktur:
   cad/
     skript/NN-<id>.py     del-skript (build123d) – körs i namnordning av bygg_projekt.sh
     delar.json            delarna i objektträdet (skrivs av skripten). "foralder": "<id>" visar delen under en annan
-                          (eget öga); ett barn som skrivs ut ihop med föräldern har "export": null, och
+                          (eget öga; sätt den med `prj.del_(…, foralder="<id>")` – fält du lagt in för hand behålls vid bygget); ett barn som skrivs ut ihop med föräldern har "export": null, och
                           <förälder>-enhet.step (om den finns) är den hopsmälta utskriftsenheten
     <id>-ytor.json        varje dels ytor (appens 3D-vy, val av yta)
     <id>.step / .3mf / .stl   CAD resp. utskriftsfiler (3mf i utskriftsläge: z ≥ 0, platt sida ner)
@@ -106,6 +106,15 @@ gruppen `<namn>` (flytta x/y/z, vrid x/y/z, skala).
 Appen laddar om automatiskt när filerna ändras. När användaren väljer en fråga ritas dess `markering` i 3D-vyn – ge
 alltid varje fråga en markering som visar exakt vad som ska mätas.
 
+## Skrivregler (appen, byggskripten och du delar filerna)
+- Appen ändrar `svar.json`, `parametrar-anvandare.json`, `kantbehandling.json` och `utskrift.json` via Skanna-motorn
+  (`motor/`, se `PLAN-motor.md`); allt skrivs atomiskt under projektets lås `<projekt>/.skanna/skriv.las`.
+- Gör likadant: använd `meddela.py`, `utskrift.py`, `prj.del_`/`prj.spara` – eller `cad/lagring.py`
+  (`lagring.uppdatera_json(fil, funktion, standard)`) om du ändrar en JSON-fil själv. Skriv aldrig om en hel fil som du
+  läst tidigare (appen kan ha lagt till något under tiden), och skriv aldrig över en fil som inte gick att läsa.
+- `bygg_projekt.sh` tar projektets bygglås: bygger appen samtidigt väntar ditt bygge ("== väntar på ett annat bygge").
+- Tider (`tid`) har millisekunder och är unika; jämför dem som tidpunkter, inte som text.
+
 ## claude.json (via `cad/meddela.py`)
 ```json
 {"status": "arbetar", "status_text": "…", "mottaget": "<tid>",
@@ -120,7 +129,8 @@ Chattpanelen i appen är uppdelad i **trådar**. Flera kan vara aktiva samtidigt
 
 - **Läsa.** I `cad/svar.json` startar varje användarmeddelande utan `trad` en tråd: rotens id är meddelandets `tid`. Svar i
   samma tråd har `trad` = rotens `tid`. Frågor i `geometri.json → fragor` är också trådar (id = fråge-id; användarens svar
-  har `fraga_id` = fråge-id). Poster med `fraga_id: "parameter"` är mått som ändrats i appen, inte en tråd. Ett meddelande
+  har `fraga_id` = fråge-id). Poster med `fraga_id: "parameter"` är mått som ändrats i appen, inte en tråd; `"historik"`
+  betyder att användaren gått tillbaka till en äldre version i appens historik – läs om skripten innan du fortsätter. Ett meddelande
   med `plats`/`yta`/`kant`/`foto` hör till en plats i modellen – titta där. Användaren kan stänga en tråd (lokalt, i
   `cad/stangda-tradar.json`); en stängd tråd kräver ingen åtgärd tills den öppnas igen med ett nytt meddelande.
 - **Kvittera direkt.** För varje ny tråd, som allra första åtgärd:
@@ -186,7 +196,10 @@ Titta först på **bilden** (vyn med strecken, magenta), läs sedan JSON:en:
 
 ## Arbetsgång
 1. Bevaka i bakgrunden: `bevaka.sh` (alla projekt) eller `bevaka.sh <projekt>` (Bash `run_in_background`); starta om efteråt.
-2. Läs nya svar (`tid` > `last_svar`), titta på bilagor, uppdatera parametrar (källa → `uppmätt`), sätt `besvarad: true`.
+   Bevakningen avslutar direkt om det finns meddelanden som du inte kvitterat (`tid` > `mottaget` i claude.json), också
+   sådana som kom medan du arbetade – kvittera därför alltid med `meddela.py … --mottaget` när du läst dem.
+2. Läs nya svar (`tid` > `mottaget`), titta på bilagor, uppdatera parametrar (källa → `uppmätt`), sätt `besvarad: true`.
+   (`last_svar` i geometri.json används bara av äldre skanningar; trådens läge styrs av `--trad … --status`.)
 3. Skriv/ändra del-skripten och kör `bygg_projekt.sh <projekt>`. I skanningar: räkna avvikelse mot `modell-mm.obj`.
 4. Ställ nya frågor bara när svaret ändrar geometrin. Mät hellre i skanningen än att fråga.
 

@@ -403,9 +403,20 @@ enum ParamStyle {
         default: return .orange
         }
     }
+    /// Visning och förifyllning av ett mått. Aldrig avrundat så att en inmatningsruta som bara bekräftas ändrar värdet:
+    /// 22,5° visas "22,5" (inte "23"), 0,125 mm "0,125"; hela tal utan decimaler i st/° och från 100 uppåt.
     static func format(_ v: Double, unit: String?) -> String {
-        if unit == "st" || unit == "°" || (v == v.rounded() && abs(v) >= 100) { return String(format: "%.0f", v) }
-        return String(format: "%.2f", v).replacingOccurrences(of: ".", with: ",")
+        func kort(_ d: Int) -> String {
+            var s = String(format: "%.\(d)f", v)
+            if s.contains(".") { while s.hasSuffix("0") { s.removeLast() }; if s.hasSuffix(".") { s.removeLast() } }
+            return s
+        }
+        let s: String
+        if v == v.rounded() && (unit == "st" || unit == "°" || abs(v) >= 100) { s = String(format: "%.0f", v) }
+        else if unit == "st" || unit == "°" || abs(v) >= 100 { s = kort(4) }
+        else if abs(v * 100 - (v * 100).rounded()) < 1e-6 { s = String(format: "%.2f", v) }
+        else { s = kort(4) }
+        return s.replacingOccurrences(of: ".", with: ",")
     }
 }
 

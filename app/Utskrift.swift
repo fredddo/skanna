@@ -194,9 +194,8 @@ extension Runner {
     }
 
     private func writeUtskrift() {
-        guard let u = utskriftURL else { return }
-        var root = (try? Data(contentsOf: u)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-        root["delar"] = utskrift.filter { !$0.value.isEmpty }.mapValues { s -> [String: Any] in
+        guard let project = output else { return }
+        let delar = utskrift.filter { !$0.value.isEmpty }.mapValues { s -> [String: Any] in
             var ut: [String: Any] = [:]
             var fil: [String: String] = [:]
             for (k, v) in s {
@@ -206,8 +205,9 @@ extension Runner {
             if !fil.isEmpty { ut[Utskrift.filamentNyckel] = fil }
             return ut
         }
-        if let d = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
-            try? d.write(to: u, options: .atomic)
+        // motorn sätter "delar" i den aktuella filen under projektets lås (andra nycklar i filen lämnas orörda)
+        do { try Motor.delad.anrop("POST", "/v1/json", kropp: ["projekt": project.path, "fil": Utskrift.fil, "nyckel": "delar", "varde": delar]) } catch {
+            self.error = "Utskriftsinställningarna kunde inte sparas: \(error)"
         }
     }
 

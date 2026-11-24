@@ -12,11 +12,6 @@ enum Hem {
     static var byggSkript: URL { url.appendingPathComponent("bygg_projekt.sh") }
     static var mallar: URL { url.appendingPathComponent("mallar", isDirectory: true) }
     static var agentProtokoll: URL { url.appendingPathComponent("AGENT.md") }
-    /// Nya projekt (modellprojekt och guidade skanningar) hamnar här.
-    static var standardProjektRot: URL {
-        let name = (Bundle.main.object(forInfoDictionaryKey: "SkannaProjektmapp") as? String) ?? "Skanna"
-        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(name, isDirectory: true)
-    }
     static var projektRot: URL {
         if let s = ProcessInfo.processInfo.environment["SKANNA_PROJEKTROT"] { return URL(fileURLWithPath: s, isDirectory: true) }
         if let s = UserDefaults.standard.string(forKey: "projektRot"), !s.isEmpty { return URL(fileURLWithPath: s, isDirectory: true) }
@@ -244,8 +239,37 @@ extension NSColor {
 
 let bildandelser: Set<String> = ["heic", "jpg", "jpeg", "png", "tif", "tiff", "dng"]
 
-func isoNu() -> String {
-    let iso = ISO8601DateFormatter()
-    iso.timeZone = .current
-    return iso.string(from: Date())
+/// Nu som ISO-tid med millisekunder och lokal tidszon ("2026-11-24T10:00:00.123+01:00").
+func isoNu() -> String { isoText(Date()) }
+
+private let isoMedMs: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; f.timeZone = .current; return f
+}()
+private let isoUtanMs: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; f.timeZone = .current; return f
+}()
+private let tidLas = NSLock()
+private var tidCache: [String: Date] = [:]
+
+func isoText(_ d: Date) -> String { tidLas.lock(); defer { tidLas.unlock() }; return isoMedMs.string(from: d) }
+
+/// En tid i protokollet (med eller utan millisekunder, valfri tidszon) som tidpunkt. Tider jämförs alltid så här,
+/// aldrig som text (texten jämförs fel över sommartid/vintertid och mellan olika format).
+func tidDatum(_ s: String?) -> Date? {
+    guard let s, !s.isEmpty else { return nil }
+    tidLas.lock(); defer { tidLas.unlock() }
+    if let d = tidCache[s] { return d }
+    let d = isoMedMs.date(from: s) ?? isoUtanMs.date(from: s)
+    if let d { if tidCache.count > 5000 { tidCache.removeAll() }; tidCache[s] = d }
+    return d
+}
+
+/// Är tiden a senare än b? Tider som inte går att läsa räknas som äldst.
+func tidEfter(_ a: String?, _ b: String?) -> Bool { (tidDatum(a) ?? .distantPast) > (tidDatum(b) ?? .distantPast) }
+
+/// Nu, men garanterat senare än alla tider i listan (unik tid för en ny post).
+func unikTid(efter tider: [String]) -> String {
+    let senast = tider.compactMap(tidDatum).max() ?? .distantPast
+    let nu = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 * 1000).rounded(.down) / 1000)   // det som skrivs (ms)
+    return isoText(nu > senast ? nu : senast.addingTimeInterval(0.001))
 }

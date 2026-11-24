@@ -17,7 +17,9 @@ extension Runner {
         let fm = FileManager.default
         let standard = [FileManager.SearchPathDirectory.downloadsDirectory, .desktopDirectory, .documentDirectory]
             .compactMap { fm.urls(for: $0, in: .userDomainMask).first }
-        let sparade = UserDefaults.standard.stringArray(forKey: "modellPlatser")
+        // testinstansen (SKANNA_PROJEKTROT satt) ska bara se sina kopior – aldrig de riktiga skanningarna i Hämtade filer m.m.
+        let isolerad = ProcessInfo.processInfo.environment["SKANNA_PROJEKTROT"] != nil
+        let sparade = isolerad ? [] : UserDefaults.standard.stringArray(forKey: "modellPlatser")
         var places = sparade.map { $0.map { URL(fileURLWithPath: $0, isDirectory: true) } } ?? standard
         places += clips.map { $0.deletingLastPathComponent() }
         var found = Set<URL>()

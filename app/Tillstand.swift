@@ -150,12 +150,15 @@ final class Runner: ObservableObject {
     private var cadTimer: Timer?
     private var historikTimer: Timer?
     private var pendingRebuild = false
+    private var byggBegaran = 0               // motorns löpnummer för senaste byggbegäran
+    private var byggTimer: Timer?
 
     init() {
         cadTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reloadCad(onlyIfChanged: true) }
         historikTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.historikTick() }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             self?.historikSpara(vanta: true)
+            Motor.delad.stoppa()
         }
         mallar = Mall.alla()
     }
@@ -220,31 +223,92 @@ final class Runner: ObservableObject {
     // MARK: Lokalt tillstånd (användarens mått och stängda frågor)
 
     func loadLocalState() {
-        overrides = overridesURL.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONDecoder().decode([String: Double].self, from: $0) } ?? [:]
+        // värde för värde: ett trasigt värde (t.ex. text) ska inte tömma alla andra mått
+        let ov = overridesURL.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        overrides = ov.compactMapValues { ($0 as? NSNumber).flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0.doubleValue } }
         closedQuestions = Set(closedURL.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? [])
     }
 
+    /// Ett tal som användaren skrivit: "−12,5", "12.5 mm", "22,5°" → Double. nil om texten inte är (bara) ett tal.
+    static func tolkaTal(_ text: String, enhet: String? = nil) -> Double? {
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\u{2212}", with: "-").replacingOccurrences(of: "\u{2013}", with: "-")
+            .replacingOccurrences(of: "\u{00A0}", with: "").replacingOccurrences(of: " ", with: "")
+        for e in [enhet, "mm", "°", "st", "×", "x"].compactMap({ $0 }) where !e.isEmpty && t.lowercased().hasSuffix(e.lowercased()) {
+            t = String(t.dropLast(e.count)); break
+        }
+        t = t.replacingOccurrences(of: ",", with: ".")
+        guard !t.isEmpty, t.allSatisfy({ "-+0123456789.eE".contains($0) }), let v = Double(t), v.isFinite else { return nil }
+        return v
+    }
+
     func setParam(_ name: String, _ text: String, unit: String? = nil) {
-        let t = text.replacingOccurrences(of: ",", with: ".").filter { "-0123456789.".contains($0) }
-        guard let v = Double(t), let url = overridesURL else { toast = "\"\(text)\" är inget tal"; return }
+        guard let v = Runner.tolkaTal(text, enhet: unit), let project = output else { toast = "\"\(text)\" är inget tal"; return }
+        if let nu = cad?.parametrar?.first(where: { $0.namn == name })?.varde, abs(nu - v) < 1e-9 { return }   // oförändrat
         noteChange("Ändra \(name)", immediate: true)
+        do { try Motor.delad.anrop("POST", "/v1/parameter", kropp: ["projekt": project.path, "namn": name, "varde": v]) } catch {
+            self.error = "Måttet kunde inte sparas: \(error)"; return
+        }
         overrides[name] = v
-        if let d = try? JSONEncoder().encode(overrides) { try? d.write(to: url, options: .atomic) }
         send(questionID: "parameter", question: name, text: String(format: "%@ = %g %@ (ändrat i appen)", name, v, unit ?? "mm"), attachment: nil)
         rebuild()
     }
 
     func resetParam(_ name: String) {
-        guard let url = overridesURL else { return }
+        guard let project = output else { return }
         noteChange("Återställ \(name)", immediate: true)
+        do { try Motor.delad.anrop("POST", "/v1/parameter", kropp: ["projekt": project.path, "namn": name, "varde": NSNull()]) } catch {
+            self.error = "Måttet kunde inte återställas: \(error)"; return
+        }
         overrides[name] = nil
-        if let d = try? JSONEncoder().encode(overrides) { try? d.write(to: url, options: .atomic) }
         rebuild()
     }
 
-    /// Kör <SkannaHem>/bygg_projekt.sh <projekt>. Fel visas i appen med loggen.
+    /// Skriv (data) eller ta bort (nil) en delad fil i cad/ via motorn – för ångra/gör om.
+    func motorFil(_ fil: String, _ data: Data?) {
+        guard let project = output else { return }
+        do {
+            try Motor.delad.anrop("POST", "/v1/fil", kropp: ["projekt": project.path, "fil": fil,
+                                                            "data": data.map { $0.base64EncodedString() } ?? NSNull()])
+        } catch { self.error = "\(fil) kunde inte skrivas: \(error)" }
+    }
+
+    /// Bygg projektet i motorns byggkö (bygg_projekt.sh, ett bygge i taget per projekt). Fel visas i appen med loggen.
+    /// Går motorn inte att nå körs bygg_projekt.sh direkt (det tar själv projektets bygglås).
     func rebuild() {
         guard canEdit, let project = output else { return }
+        if let svar = try? Motor.delad.anrop("POST", "/v1/bygg", kropp: ["projekt": project.path]), let n = svar["begaran"] as? Int {
+            kanslighetProc?.terminate(); kanslighetProc = nil
+            buildError = nil
+            rebuilding = true
+            byggBegaran = max(byggBegaran, n)
+            if byggTimer == nil {
+                byggTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in self?.byggKoll(project) }
+            }
+            return
+        }
+        rebuildLokalt(project)
+    }
+
+    private func byggKoll(_ project: URL) {
+        guard output == project else { byggTimer?.invalidate(); byggTimer = nil; rebuilding = false; return }
+        guard let s = try? Motor.delad.anrop("GET", "/v1/bygg", query: ["projekt": project.path], timeout: 5) else { return }
+        guard let klar = s["klar_till"] as? Int, klar >= byggBegaran else { return }
+        byggTimer?.invalidate(); byggTimer = nil
+        rebuilding = false
+        let text = s["logg"] as? String ?? ""
+        let kod = s["kod"] as? Int ?? 1
+        buildLog = text
+        if kod != 0 {
+            let last = text.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }).map(String.init) ?? ""
+            buildError = "Bygget misslyckades: " + last
+        }
+        reloadCad()
+        refreshScans()
+        if kod == 0 { startKanslighet() }
+    }
+
+    private func rebuildLokalt(_ project: URL) {
         if rebuilding { pendingRebuild = true; return }
         rebuilding = true
         kanslighetProc?.terminate(); kanslighetProc = nil
@@ -336,12 +400,11 @@ final class Runner: ObservableObject {
     func kantbehandla(_ k: Kantbehandling, namn: String) {
         guard let folder = cadFolder else { return }
         noteChange(k.typ == "fillet" ? "Fillet" : "Fas", immediate: true)
-        let url = folder.appendingPathComponent("kantbehandling.json")
-        var list = (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([Kantbehandling].self, from: $0) } ?? []
-        list.removeAll { $0.del == k.del && $0.kant == k.kant }
-        list.append(k)
-        let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-        if let d = try? enc.encode(list) { try? d.write(to: url, options: .atomic) }
+        _ = folder
+        guard let project = output else { return }
+        do { try Motor.delad.anrop("POST", "/v1/kantbehandling", kropp: ["projekt": project.path, "post": Motor.dict(k)]) } catch {
+            self.error = "Kantbehandlingen kunde inte sparas: \(error)"; return
+        }
         let what = k.typ == "fillet" ? String(format: "Fillet r = %g mm", k.matt) : String(format: "Fas %g mm", k.matt)
         send(questionID: "meddelande", question: "Kantbehandling", text: "\(what) på \(namn), kant \(k.kant.map(String.init) ?? "?")",
              attachment: nil, plats: PickPoint(pos: k.mitt, target: namn, del: k.del), kant: k.kant)
@@ -488,14 +551,8 @@ final class Runner: ObservableObject {
     // MARK: Claude
 
     func replies(to a: Svar) -> [ClaudeInfo.Meddelande] { claude?.meddelanden?.filter { $0.svar_pa == a.tid } ?? [] }
-    func isReceived(_ a: Svar) -> Bool { (claude?.mottaget).map { $0 >= a.tid } ?? false }
-    func isRead(_ a: Svar) -> Bool { (cad?.last_svar).map { $0 >= a.tid } ?? false }
-
-    /// Meddelanden från Claude som inte är svar på något användarmeddelande (t.ex. första hälsningen).
-    var looseReplies: [ClaudeInfo.Meddelande] {
-        let tids = Set(answers.map(\.tid))
-        return claude?.meddelanden?.filter { $0.svar_pa == nil || !tids.contains($0.svar_pa!) } ?? []
-    }
+    func isReceived(_ a: Svar) -> Bool { (claude?.mottaget).map { !tidEfter(a.tid, $0) } ?? false }
+    func isRead(_ a: Svar) -> Bool { (cad?.last_svar).map { !tidEfter(a.tid, $0) } ?? false }
 
     static func pekBokstav(_ i: Int) -> String { i < 26 ? String(UnicodeScalar(65 + i)!) : "\(i + 1)" }
 
@@ -634,9 +691,13 @@ final class Runner: ObservableObject {
         do { try p.run(); kanslighetProc = p; kanslighetKor = true } catch { kanslighetKor = false }
     }
 
+    /// Post för post: en post som inte går att läsa hoppas över i stället för att hela samtalet försvinner.
     func loadAnswers() {
-        answers = answersURL.flatMap { try? Data(contentsOf: $0) }
-            .flatMap { try? JSONDecoder().decode(SvarFil.self, from: $0) }?.svar ?? []
+        let rot = answersURL.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let poster = rot?["svar"] as? [Any] ?? []
+        answers = poster.compactMap { p in
+            (try? JSONSerialization.data(withJSONObject: p)).flatMap { try? JSONDecoder().decode(Svar.self, from: $0) }
+        }
     }
 
     /// Spara ett svar (eller fritt meddelande) med ev. bilaga, som kopieras in i cad/bilagor/.
@@ -656,15 +717,36 @@ final class Runner: ObservableObject {
             }
             if (try? fm.copyItem(at: attachment, to: dest)) != nil { bilaga = "bilagor/" + dest.lastPathComponent }
         }
+        let ny = Svar(fraga_id: questionID, fraga: question, svar: text, bilaga: bilaga, tid: isoNu(),
+                      plats: plats?.pos, pa: plats?.target, yta: plats?.yta, ytatyp: plats?.ytatyp, del: plats?.del,
+                      foto: plats?.foto, foto_px: plats?.foto_px, trad: trad, kant: kant, ritning: ritning,
+                      fler: fler.isEmpty ? nil : fler.map { Svar.Plats(plats: $0.pos, pa: $0.target, yta: $0.yta, ytatyp: $0.ytatyp, del: $0.del,
+                                                                        foto: $0.foto, foto_px: $0.foto_px) })
+        var post = Motor.dict(ny)
+        post.removeValue(forKey: "tid")          // motorn sätter en unik tid
+        if let project = output, (try? Motor.delad.anrop("POST", "/v1/svar", kropp: ["projekt": project.path, "post": post])) != nil {
+            loadAnswers()
+            return
+        }
+        // reserv utan motor: lägg till posten i den befintliga filen (okända fält och poster bevaras), under projektets lås
+        let projekt = folder.deletingLastPathComponent()
+        let ok: Bool = ProjektLas.medLas(projekt) {
+            var rot: [String: Any] = [:]
+            if let d = try? Data(contentsOf: url) {
+                guard let r = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return false }   // trasig: skriv inte över
+                rot = r
+            }
+            var lista = rot["svar"] as? [Any] ?? []
+            var p = Motor.dict(ny)
+            let tider = lista.compactMap { ($0 as? [String: Any])?["tid"] as? String }
+            p["tid"] = unikTid(efter: tider)
+            lista.append(p)
+            rot["svar"] = lista
+            guard let data = try? JSONSerialization.data(withJSONObject: rot, options: [.prettyPrinted, .withoutEscapingSlashes]) else { return false }
+            return (try? data.write(to: url, options: .atomic)) != nil
+        }
+        if !ok { error = "Meddelandet kunde inte sparas: cad/svar.json går inte att läsa. Rätta filen (eller ta bort den) och skicka igen." }
         loadAnswers()
-        answers.append(Svar(fraga_id: questionID, fraga: question, svar: text, bilaga: bilaga, tid: isoNu(),
-                            plats: plats?.pos, pa: plats?.target, yta: plats?.yta, ytatyp: plats?.ytatyp, del: plats?.del,
-                            foto: plats?.foto, foto_px: plats?.foto_px, trad: trad, kant: kant, ritning: ritning,
-                            fler: fler.isEmpty ? nil : fler.map { Svar.Plats(plats: $0.pos, pa: $0.target, yta: $0.yta, ytatyp: $0.ytatyp, del: $0.del,
-                                                                              foto: $0.foto, foto_px: $0.foto_px) }))
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-        if let data = try? enc.encode(SvarFil(svar: answers)) { try? data.write(to: url, options: .atomic) }
     }
 
     func pickAttachment() -> URL? {

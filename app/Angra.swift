@@ -110,7 +110,8 @@ extension Runner {
         if b.utskrift != current.utskrift, let u = utskriftURL {
             // utskriftsinställningar: filen tillbaka, ingen ombyggnad behövs; Claude får veta (om inte modellen också ändras)
             utskriftTimer?.invalidate(); utskriftAndrade = [:]
-            if let d = b.utskrift { try? d.write(to: u, options: .atomic) } else { try? FileManager.default.removeItem(at: u) }
+            _ = u
+            motorFil(Utskrift.fil, b.utskrift)
             loadUtskrift()
             if b.sammaModell(current) {
                 send(questionID: "parameter", question: "Ångra", text: message + " (utskriftsinställningar i appen, cad/utskrift.json)", attachment: nil)
@@ -120,10 +121,8 @@ extension Runner {
         // modellen: mått, kantbehandlingar och del-skript tillbaka på disk, bygg om och berätta för Claude
         let fm = FileManager.default
         overrides = b.overrides
-        let enc = JSONEncoder()
-        if let d = try? enc.encode(b.overrides) { try? d.write(to: folder.appendingPathComponent("parametrar-anvandare.json"), options: .atomic) }
-        let kantURL = folder.appendingPathComponent("kantbehandling.json")
-        if let k = b.kant { try? k.write(to: kantURL, options: .atomic) } else { try? fm.removeItem(at: kantURL) }
+        motorFil("parametrar-anvandare.json", try? JSONEncoder().encode(b.overrides))
+        motorFil("kantbehandling.json", b.kant)
         if let dir = scriptFolder {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
             for (name, _) in current.skript where b.skript[name] == nil { try? fm.removeItem(at: dir.appendingPathComponent(name)) }

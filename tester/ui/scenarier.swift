@@ -311,6 +311,51 @@ enum Scenarier {
             },
         ]),
 
+        s("Meddelanden går via motorn och tappar inget", [.gor {
+            let cad = projekt.appendingPathComponent("cad")
+            try? JSONSerialization.data(withJSONObject: ["svar": [
+                ["fraga_id": "meddelande", "fraga": "", "svar": "Gammalt", "tid": "2026-11-20T10:00:00+01:00", "framtida_falt": 1],
+                ["fraga_id": "meddelande", "fraga": "", "svar": "Trasig post", "tid": "2026-11-20T10:01:00+01:00", "yta": "inte ett tal"]],
+                "egen_nyckel": true]).write(to: cad.appendingPathComponent("svar.json"))
+            run.loadAnswers()
+            kolla(run.answers.count == 1, "en trasig post ska hoppas över, inte tömma samtalet: \(run.answers.count) poster")
+            run.send(questionID: "meddelande", question: "", text: "Ett", attachment: nil)
+            run.send(questionID: "meddelande", question: "", text: "Två", attachment: nil)
+            let rot = json(cad.appendingPathComponent("svar.json"))
+            let poster = rot["svar"] as? [[String: Any]] ?? []
+            kolla(poster.count == 4, "alla poster ska finnas kvar (2 gamla + 2 nya): \(poster.count)")
+            kolla(rot["egen_nyckel"] as? Bool == true && (poster.first?["framtida_falt"] as? Int) == 1, "okända fält ska bevaras")
+            let tider = poster.compactMap { $0["tid"] as? String }
+            kolla(Set(tider).count == tider.count, "tiderna ska vara unika: \(tider)")
+            kolla(run.answers.count == 3, "appen ska visa 3 läsbara meddelanden: \(run.answers.count)")
+            kolla((try? Motor.delad.anrop("GET", "/v1/halsa"))?["ok"] as? Bool == true, "motorn ska svara (annars gick testet via reserven)")
+        }]),
+
+        s("Tråd som Claude arbetar med visas inte som klar", [.gor {
+            let cad = projekt.appendingPathComponent("cad")
+            let t1 = isoText(Date().addingTimeInterval(-60))
+            try? JSONSerialization.data(withJSONObject: ["svar": [["fraga_id": "meddelande", "fraga": "", "svar": "Gör hål i locket", "tid": t1]]])
+                .write(to: cad.appendingPathComponent("svar.json"))
+            try? JSONSerialization.data(withJSONObject: ["status": "arbetar", "mottaget": t1, "meddelanden": [] as [Any],
+                                                         "tradar": [t1: ["status": "arbetar", "titel": "Hål"]]])
+                .write(to: cad.appendingPathComponent("claude.json"))
+            var geo = json(cad.appendingPathComponent("geometri.json")); geo["last_svar"] = t1
+            try? JSONSerialization.data(withJSONObject: geo).write(to: cad.appendingPathComponent("geometri.json"))
+            run.loadAnswers(); run.reloadCad()
+        }, .vanta(0.3), .gor {
+            let th = run.chatThreads(closedLocal: []).threads.first
+            kolla(th?.status == .arbetar, "läst men obesvarad tråd med status arbetar ska visas som arbetar: \(String(describing: th?.status))")
+        }]),
+
+        s("Måttinmatning tolkar minus, komma och grader", [.gor {
+            kolla(Runner.tolkaTal("\u{2212}12,5") == -12.5, "−12,5 ska bli −12,5")
+            kolla(Runner.tolkaTal("22,5°", enhet: "°") == 22.5, "22,5° ska bli 22,5")
+            kolla(Runner.tolkaTal("12.5 mm", enhet: "mm") == 12.5, "12.5 mm ska bli 12,5")
+            kolla(Runner.tolkaTal("M3") == nil && Runner.tolkaTal("2 x 4") == nil, "text som inte är ett tal ska avvisas")
+            kolla(ParamStyle.format(22.5, unit: "°") == "22,5", "22,5° ska visas 22,5, inte \(ParamStyle.format(22.5, unit: "°"))")
+            kolla(ParamStyle.format(0.125, unit: "mm") == "0,125" && ParamStyle.format(12.5, unit: "mm") == "12,50", "mm-visning")
+        }]),
+
         Scenario(namn: "Vykubens sidor", steg: [.gor {
             kolla(ModelView.Coordinator.cubeMaterials(1).count == 6 && ModelView.Coordinator.cubeMaterials(-1).count == 6, "kuben ska ha sex sidor")
         }]),

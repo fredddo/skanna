@@ -23,6 +23,7 @@ Allt är i mm, samma ram som skanningen (om det finns en): X = längsta, Z = kor
 import json
 from pathlib import Path
 
+import lagring
 from ytor import export_faces, register_part
 
 KALLOR = ("användare", "uppmätt", "skanning", "standard", "antagande", "mall")
@@ -33,18 +34,20 @@ class Projekt:
         self.dir = Path(path).expanduser().resolve()
         self.cad = self.dir / "cad"
         self.cad.mkdir(parents=True, exist_ok=True)
-        self.grupp = None
-        self._params = []          # [(namn, värde, enhet, källa, osäkerhet)]
+        self.grupp = None          # senast registrerade grupp (frågor i spara() hör till den)
+        self._grupper = []         # alla grupper som skriptet registrerat
+        self._params = []          # [(namn, värde, enhet, källa, osäkerhet, grupp)]
         self._mattlinjer = []      # [{namn, fran, till, del, faktor, grupp}] – var måtten sitter (appens handtag)
-        self.info = self._read(self.dir / "projekt.json", {})
+        try:
+            self.info = self._read(self.dir / "projekt.json", {})
+        except lagring.Trasig:
+            self.info = {}
 
     # ---- läsa ----------------------------------------------------------------------------------------------------
     @staticmethod
     def _read(path, default):
-        try:
-            return json.loads(Path(path).read_text())
-        except (OSError, ValueError):
-            return default
+        """Saknas filen: default. Finns den men är trasig: lagring.Trasig (bygget stannar hellre än att skriva över)."""
+        return lagring.las_json(path, default)
 
     @property
     def har_skanning(self):
@@ -75,7 +78,9 @@ class Projekt:
         nfc = lambda t: unicodedata.normalize("NFC", t)   # macOS-filnamn (importerade delar) är NFD
         grupp = nfc(grupp)
         self.grupp = grupp
-        overrides = {nfc(k): v for k, v in self._read(self.cad / "parametrar-anvandare.json", {}).items()}
+        if grupp not in self._grupper:
+            self._grupper.append(grupp)
+        overrides = {nfc(k): v for k, v in (self._read(self.cad / "parametrar-anvandare.json", {}) or {}).items()}
         out = {}
         for namn, s in spec.items():
             s = s if isinstance(s, tuple) else (s,)
@@ -84,10 +89,14 @@ class Projekt:
             kalla = s[2] if len(s) > 2 else "mall"
             osak = s[3] if len(s) > 3 else None
             full = nfc(f"{grupp}: {namn}")
-            if full in overrides:
-                varde, kalla = float(overrides[full]), "användare"
+            if full in overrides and overrides[full] is not None:
+                try:
+                    varde = float(str(overrides[full]).replace(",", ".").replace("\u2212", "-"))
+                except ValueError:
+                    raise SystemExit(f"parametrar-anvandare.json: '{full}' = {overrides[full]!r} är inget tal")
+                kalla = "användare"
             out[namn] = varde
-            self._params.append((full, varde, enhet, kalla, osak))
+            self._params.append((full, varde, enhet, kalla, osak, grupp))
         return out
 
     def mattlinje(self, namn, fran, till, del_=None, faktor=1.0):
@@ -112,6 +121,7 @@ class Projekt:
         if not isinstance(poster, list):
             return solid
         ändrad = False
+        status = {}
         for post in poster:
             if post.get("del") != pid:
                 continue
@@ -138,10 +148,20 @@ class Projekt:
                 post["status"] = "ok"
             except Exception as ex:
                 post["status"] = f"fel: {str(ex).splitlines()[0][:80] if str(ex) else type(ex).__name__}"
+            status[self._kantnyckel(post)] = post["status"]
             ändrad = True
         if ändrad:
-            path.write_text(json.dumps(poster, ensure_ascii=False, indent=2))
+            # skriv tillbaka bara status, i den aktuella filen (appen kan ha lagt till poster under tiden)
+            def satt(aktuell):
+                for p in aktuell if isinstance(aktuell, list) else []:
+                    if self._kantnyckel(p) in status:
+                        p["status"] = status[self._kantnyckel(p)]
+            lagring.uppdatera_json(path, satt, [])
         return solid
+
+    @staticmethod
+    def _kantnyckel(p):
+        return (p.get("del"), p.get("kant"), p.get("typ"), p.get("matt"), p.get("tid"), json.dumps(p.get("mitt")))
 
     @staticmethod
     def _likadan_rotation(orig, ut):
@@ -164,7 +184,7 @@ class Projekt:
         return None
 
     def del_(self, pid, namn, solid, roll="design", farg="#2E7DD7", beskrivning=None, utskrift=True,
-             utskrift_solid=None, bambu=None, kropp_namn=None, kropp_farger=None, kropp_grupper=None):
+             utskrift_solid=None, bambu=None, kropp_namn=None, kropp_farger=None, kropp_grupper=None, foralder=None):
         """Exportera en del: <id>.step, <id>-ytor.json (appens 3D-vy), och om utskrift: <id>.3mf/.stl i utskriftsläge
         (lägsta z på plattan, centrerad).
 
@@ -173,7 +193,8 @@ class Projekt:
         axelrotationerna och tillämpas på den behandlade soliden; hittas ingen används den obehandlade).
         bambu = {"wall_loops": "4", "plast": "PETG", …}: Bambu Studio-inställningar för delen (skrivs till delar.json) –
         utgångsläget; cad/utskrift.json (appen/agenten) går före vid exporten, se cad/utskrift.py.
-        Kantbehandling (cad/kantbehandling.json) görs först, så step/ytor/3mf alla får fillet/fas."""
+        Kantbehandling (cad/kantbehandling.json) görs först, så step/ytor/3mf alla får fillet/fas.
+        foralder = id för delen som den här visas under i objektträdet (t.ex. cellbädden under distansringen)."""
         import os
         from build123d import Location, Mesher, export_step, export_stl
         snabb = bool(os.environ.get("SKANNA_SNABB"))   # känslighetsbygget (kanslighet.py) behöver bara ytorna
@@ -221,34 +242,40 @@ class Projekt:
         s = _P(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
         skript = s.name if s and s.parent == (self.cad / "skript").resolve() else None
         register_part(self.cad, pid, namn, f"{pid}-ytor.json", roll, farg, export=export, beskrivning=beskrivning,
-                      bambu=bambu, skript=skript)
+                      bambu=bambu, skript=skript, foralder=foralder)
         print(f"{pid}: {n} ytor")
         return n
 
     # ---- geometri.json -------------------------------------------------------------------------------------------
     def spara(self, beskrivning=None, fragor=None, status=None, avvikelse=None):
-        """Skriv gruppens mått (och ev. frågor med id-prefix = grupp) till geometri.json utan att röra andras."""
-        geo = self.geometri()
+        """Skriv skriptets mått (alla grupper det registrerat) och ev. frågor (senaste gruppen) till geometri.json utan att
+        röra andra skripts. Läs–ändra–skriv sker under projektets skrivlås, atomiskt."""
         g = self.grupp
-        prefix = f"{g}: " if g else None
-        params = [p for p in geo.get("parametrar", []) if not (prefix and p.get("namn", "").startswith(prefix))]
-        for full, v, enhet, kalla, osak in self._params:
-            v = int(round(v)) if enhet in ("st", "°") and abs(v - round(v)) < 1e-9 else round(v, 3)
-            params.append({"namn": full, "varde": v, "enhet": enhet, "kalla": kalla, "osakerhet": osak, "grupp": g})
-        geo["parametrar"] = params
-        geo["mattlinjer"] = [m for m in geo.get("mattlinjer", []) if m.get("grupp") != g] + self._mattlinjer
-        if fragor is not None:
-            geo["fragor"] = [f for f in geo.get("fragor", []) if f.get("grupp") != g] + [dict(f, grupp=g) for f in fragor]
-        if beskrivning and not geo.get("beskrivning"):
-            geo["beskrivning"] = beskrivning
-        if status:
-            geo["status"] = status
-        elif not geo.get("status"):
-            geo["status"] = "utkast"
-        if avvikelse:
-            geo["avvikelse"] = avvikelse
-        (self.cad / "geometri.json").write_text(json.dumps(geo, ensure_ascii=False, indent=2))
-        return geo
+        grupper = set(self._grupper) | ({g} if g else set())
+        prefix = tuple(f"{x}: " for x in grupper)
+
+        def andra(geo):
+            if not isinstance(geo, dict):
+                raise lagring.Trasig("geometri.json är inte ett objekt")
+            mine = lambda p: p.get("grupp") in grupper or (prefix and str(p.get("namn", "")).startswith(prefix))
+            params = [p for p in geo.get("parametrar", []) if not mine(p)]
+            for full, v, enhet, kalla, osak, grp in self._params:
+                v = int(round(v)) if enhet in ("st", "°") and abs(v - round(v)) < 1e-9 else round(v, 3)
+                params.append({"namn": full, "varde": v, "enhet": enhet, "kalla": kalla, "osakerhet": osak, "grupp": grp})
+            geo["parametrar"] = params
+            geo["mattlinjer"] = [m for m in geo.get("mattlinjer", []) if m.get("grupp") not in grupper] + self._mattlinjer
+            if fragor is not None:
+                geo["fragor"] = [f for f in geo.get("fragor", []) if f.get("grupp") != g] + [dict(f, grupp=g) for f in fragor]
+            if beskrivning and not geo.get("beskrivning"):
+                geo["beskrivning"] = beskrivning
+            if status:
+                geo["status"] = status
+            elif not geo.get("status"):
+                geo["status"] = "utkast"
+            if avvikelse:
+                geo["avvikelse"] = avvikelse
+            geo.setdefault("fragor", [])
+        return lagring.uppdatera_json(self.cad / "geometri.json", andra, {"parametrar": [], "fragor": []})
 
 
 def _skriv_3mf(verts, tris, path):

@@ -9,6 +9,8 @@ from pathlib import Path
 
 from build123d import GeomType
 
+import lagring
+
 TYP = {GeomType.PLANE: "plan", GeomType.CYLINDER: "cylinder", GeomType.CONE: "kon", GeomType.SPHERE: "sfär",
        GeomType.TORUS: "torus"}
 
@@ -129,32 +131,45 @@ def export_faces(solid, path: Path, tolerance=0.02, angular=0.15, kropp_namn=Non
     if hoppade:
         print(f"Varning: {hoppade} av {len(faces)} ytor gick inte att triangulera och visas/går inte att välja "
               f"(trasig eller degenererad yta i geometrin)", flush=True)
-    Path(path).write_text(json.dumps({"ytor": ytor, "kanter": kanter, "kroppar": kroppar},
-                                     separators=(",", ":"), ensure_ascii=False))
+    lagring.skriv_json(path, {"ytor": ytor, "kanter": kanter, "kroppar": kroppar}, kompakt=True)
     return len(ytor)
 
 
-def register_part(cad_dir, pid, namn, fil, roll, farg, export=None, beskrivning=None, bambu=None, skript=None):
+def register_part(cad_dir, pid, namn, fil, roll, farg, export=None, beskrivning=None, bambu=None, skript=None, foralder=None):
     """Lägg till/uppdatera en del i <skanning>/cad/delar.json (som Skanna.app visar i objektträdet).
 
     roll: "referens" (rekonstruerad befintlig del) | "design" (ny del att tillverka)
     bambu: valfri dict med Bambu Studio-inställningar för delen (t.ex. {"wall_loops": "4"}).
     farg: "#RRGGBB"; export: filnamn (t.ex. "provring.3mf") som appens Exportera-knapp öppnar i Bambu Studio.
     skript: del-skriptets filnamn i cad/skript/ (appens Radera tar bort skriptet om det bara gör den här delen).
+    foralder: id för delen som den här visas under i objektträdet. None = behåll ett "foralder" som redan står i filen
+    (t.ex. inlagt för hand); "" tar bort det.
+    Fält som någon annan lagt till i delens post (och som inte sätts här) behålls. Skrivs atomiskt under projektets lås.
     """
     path = Path(cad_dir) / "delar.json"
-    data = json.loads(path.read_text()) if path.exists() else {"delar": []}
-    delar = [d for d in data["delar"] if d["id"] != pid]
-    delar.append({"id": pid, "namn": namn, "fil": fil, "roll": roll, "farg": farg, "export": export,
-                  "beskrivning": beskrivning})
-    if bambu:
-        delar[-1]["bambu"] = {k: ({fk: str(fv) for fk, fv in v.items()} if isinstance(v, dict) else str(v))
-                              for k, v in bambu.items()}
-    if skript:
-        delar[-1]["skript"] = skript
-    order = {"referens": 0, "design": 1}
-    data["delar"] = sorted(delar, key=lambda d: (order.get(d["roll"], 2), d["namn"]))
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+    def andra(data):
+        if not isinstance(data, dict) or not isinstance(data.get("delar", []), list):
+            raise lagring.Trasig("delar.json har fel form")
+        gammal = next((d for d in data.get("delar", []) if d.get("id") == pid), {})
+        delar = [d for d in data.get("delar", []) if d.get("id") != pid]
+        ny = {k: v for k, v in gammal.items() if k not in ("bambu", "skript")}
+        ny.update({"id": pid, "namn": namn, "fil": fil, "roll": roll, "farg": farg, "export": export,
+                   "beskrivning": beskrivning})
+        if bambu:
+            ny["bambu"] = {k: ({fk: str(fv) for fk, fv in v.items()} if isinstance(v, dict) else str(v))
+                           for k, v in bambu.items()}
+        if skript:
+            ny["skript"] = skript
+        if foralder is not None:
+            ny.pop("foralder", None)
+            if foralder:
+                ny["foralder"] = foralder
+        delar.append(ny)
+        order = {"referens": 0, "design": 1}
+        data["delar"] = sorted(delar, key=lambda d: (order.get(d.get("roll"), 2), d.get("namn", "")))
+
+    lagring.uppdatera_json(path, andra, {"delar": []})
 
 
 def apply_overrides(cad_dir, D):
