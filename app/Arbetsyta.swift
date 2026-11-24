@@ -178,7 +178,7 @@ struct Workspace: View {
 
     private var viewer: some View {
         ModelView(url: run.model, run: run, parts: run.partSpecs, hidden: run.hidden, scanStyle: min(shading, 3), background: background,
-                  marks: run.tool == .valj ? run.focusMarks : (run.tool == .peka ? run.pins : run.focusMarks + run.pins),
+                  marks: (run.tool == .valj ? run.focusMarks : (run.tool == .peka ? run.pins : run.focusMarks + run.pins)) + run.kommentarMarks,
                   selectedFace: run.pick.flatMap { p in p.yta.map { "\(p.del ?? ""):\($0)" } },
                   photos: run.reliablePhotos, photoFolder: run.output, followPhotos: followPhotos,
                   overlayOpacity: overlayOpacity, cadStyle: cadStyle, viewRequest: run.viewRequest,

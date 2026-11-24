@@ -12,11 +12,12 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 HEM = Path(os.environ.get("SKANNA_HEM") or Path(__file__).resolve().parent.parent)
 sys.path.insert(0, str(HEM / "cad"))
 import lagring  # noqa: E402
+import dela  # noqa: E402
 
 VERSION = 1
 # filer i cad/ som /v1/fil och /v1/json får skriva (gränssnittets delade filer)
@@ -252,6 +253,84 @@ def vanta(q, _b):
         time.sleep(0.5)
 
 
+# ---- delning (PLAN-webbvisare.md) ---------------------------------------------------------------------------------
+_anrop = threading.local()      # porten för det pågående anropet (för lokal_lank)
+
+
+def _lokal_bas():
+    return f"http://127.0.0.1:{getattr(_anrop, 'port', 0)}/delat"
+
+
+def _lokal_lank(post):
+    return f"{_lokal_bas()}/visare/#d={post['id']}&k={post['nyckel']}"
+
+
+def dela_post(_q, b):
+    p = _projekt(b.get("projekt"))
+    med = b.get("med") or []
+    if not isinstance(med, list) or not all(isinstance(m, str) for m in med):
+        raise Fel(400, "med ska vara en lista med del-id")
+    fran = b.get("fran")
+    if fran is not None and not isinstance(fran, str):
+        raise Fel(400, "fran ska vara text")
+    bas = dela.installningar().get("bas_url") or _lokal_bas()
+    r = dela.dela(p, None, bas, med, fran)
+    return {"id": r["id"], "lank": r["lank"], "lokal_lank": _lokal_lank(r), "brevlada": r["brevlada"]}
+
+
+def dela_aterkalla(_q, b):
+    p = _projekt(b.get("projekt"))
+    return dela.aterkalla(p, None, b.get("id"))
+
+
+def delningar_get(q, _b):
+    p = _projekt(q.get("projekt"))
+    return {"delningar": [dict(x, lokal_lank=_lokal_lank(x)) for x in dela.delningar(p) if isinstance(x.get("nyckel"), str)]}
+
+
+def kommentarer_post(_q, b):
+    p = _projekt(b.get("projekt"))
+    return dela.ta_emot(p, b.get("lank"))
+
+
+def kommentarer_hamta(_q, b):
+    p = _projekt(b.get("projekt"))
+    return dela.hamta(p)
+
+
+def kommentarer_get(q, _b):
+    p = _projekt(q.get("projekt"))
+    return {"kommentarer": dela.kommentarer(p)}
+
+
+TYPER = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
+         ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8", ".skd": "application/octet-stream",
+         ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8",
+         ".webmanifest": "application/manifest+json"}
+
+
+def delad_fil(sokvag):
+    """Sökväg efter /delat/ → (fil, Content-Type) under delat-mappen, eller ("/…/", None) för en omdirigering.
+    Ingen nyckel krävs; bara vanliga filer inne i mappen (inga .., inga dolda filer, inga symlänkar ut ur mappen)."""
+    rot = dela.delat_mapp()
+    delar = [d for d in unquote(sokvag).split("/")]
+    if any(d in ("..", ".") or d.startswith(".") or "\\" in d or "\0" in d for d in delar if d):
+        raise Fel(404, "finns inte")
+    rel = "/".join(d for d in delar if d)
+    f = (rot / rel).resolve() if rel else rot
+    if f != rot and not f.is_relative_to(rot):
+        raise Fel(404, "finns inte")
+    if f.is_dir():
+        if not sokvag.endswith("/"):
+            return None, None
+        f = (f / "index.html").resolve()
+        if not f.is_relative_to(rot):
+            raise Fel(404, "finns inte")
+    if not f.is_file():
+        raise Fel(404, "finns inte")
+    return f, TYPER.get(f.suffix.lower(), "application/octet-stream")
+
+
 ROUTES = {
     ("GET", "/v1/halsa"): halsa,
     ("GET", "/v1/projekt"): projekt_info,
@@ -263,6 +342,12 @@ ROUTES = {
     ("POST", "/v1/bygg"): bygg_post,
     ("GET", "/v1/bygg"): bygg_get,
     ("GET", "/v1/vanta"): vanta,
+    ("POST", "/v1/dela"): dela_post,
+    ("POST", "/v1/dela/aterkalla"): dela_aterkalla,
+    ("GET", "/v1/delningar"): delningar_get,
+    ("POST", "/v1/kommentarer"): kommentarer_post,
+    ("POST", "/v1/kommentarer/hamta"): kommentarer_hamta,
+    ("GET", "/v1/kommentarer"): kommentarer_get,
 }
 
 
@@ -281,8 +366,36 @@ def gor_handler(nyckel):
             self.end_headers()
             self.wfile.write(body)
 
+        def _delat(self, u):
+            """GET /delat/<sökväg> – statiska filer under delat-mappen, utan nyckel (lokal förhandsvisning)."""
+            try:
+                f, typ = delad_fil(u.path[len("/delat"):])
+                if f is None:
+                    self.send_response(301)
+                    self.send_header("Location", u.path + "/" + (("?" + u.query) if u.query else ""))
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                body = f.read_bytes()
+            except Fel as e:
+                self._svara(e.kod, {"fel": str(e)})
+                return
+            except OSError:
+                self._svara(404, {"fel": "finns inte"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", typ)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)
+
         def _hantera(self, metod):
             u = urlparse(self.path)
+            _anrop.port = self.server.server_address[1]
+            if metod == "GET" and (u.path == "/delat" or u.path.startswith("/delat/")):
+                return self._delat(u)
             try:
                 if nyckel and self.headers.get("X-Skanna-Nyckel") != nyckel:
                     raise Fel(401, "fel eller saknad nyckel")
@@ -298,6 +411,8 @@ def gor_handler(nyckel):
                         raise Fel(400, "kroppen ska vara ett JSON-objekt")
                 self._svara(200, fn(q, b))
             except Fel as e:
+                self._svara(e.kod, {"fel": str(e)})
+            except dela.DelaFel as e:
                 self._svara(e.kod, {"fel": str(e)})
             except lagring.Trasig as e:
                 self._svara(409, {"fel": str(e)})

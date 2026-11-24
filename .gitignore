@@ -11,3 +11,5 @@ __pycache__/
 /test/
 # testsvitens byggen (tester/testa.sh)
 /tester/.bygg/
+# krypterade delningar och en kopia av visaren (cad/dela.py) – publiceras från en egen mapp, aldrig härifrån
+/delat/

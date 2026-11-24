@@ -23,7 +23,7 @@ steg "1. Skript"
 for f in bygg-beta.sh bevaka.sh bygg_projekt.sh tester/testa.sh ikon/bygg_ikon.sh; do
   zsh -n "$f" 2>"$TMP/sh.txt" && ok "$f" || { nej "$f"; cat "$TMP/sh.txt" }
 done
-"$PY" -m py_compile cad/*.py motor/*.py 2>"$TMP/py.txt" && ok "cad/*.py och motor/*.py kompilerar" || { nej "cad/*.py, motor/*.py"; cat "$TMP/py.txt" }
+"$PY" -m py_compile cad/*.py motor/*.py brevlada/*.py 2>"$TMP/py.txt" && ok "cad/*.py, motor/*.py och brevlada/*.py kompilerar" || { nej "cad/*.py, motor/*.py, brevlada/*.py"; cat "$TMP/py.txt" }
 
 steg "2. Appen kompilerar"
 if swiftc -parse-as-library -typecheck app/*.swift 2>"$TMP/sw.txt" && swiftc -parse-as-library -typecheck main.swift 2>>"$TMP/sw.txt"; then
@@ -50,6 +50,13 @@ if (cd tester/python && SKANNA_TESTFIXTUR="$FIXTUR" "$PY" -m unittest discover -
   ok "$(grep -E '^Ran ' "$TMP/pyt.txt")"
 else
   nej "Python-tester underkända"; grep -vE '^\.+$' "$TMP/pyt.txt" | tail -40
+fi
+
+steg "4b. Webbvisaren"
+if command -v node >/dev/null; then
+  if node webb/visare/test/test.mjs >"$TMP/webb.txt" 2>&1; then ok "$(tail -1 "$TMP/webb.txt")"; else nej "webbvisarens tester underkända"; tail -20 "$TMP/webb.txt"; fi
+else
+  echo "  – hoppar över (node saknas)"
 fi
 
 steg "5. UI"

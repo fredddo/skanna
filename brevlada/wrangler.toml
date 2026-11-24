@@ -1,0 +1,16 @@
+# Mall för Cloudflare Worker-varianten av brevlådan (se LÄSMIG.md).
+# Fyll i KV-namnrymdens id från `wrangler kv namespace create BREV`. Konto-id behövs inte här:
+# wrangler tar det från inloggningen (`wrangler login`).
+
+name = "skanna-brevlada"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "BREV"
+id = "<KV-NAMNRYMDENS-ID>"
+
+# Hemligheten läggs INTE här utan som secret: `wrangler secret put BREVLADA_HEMLIG`
+# [vars]
+# MAX_LADOR = "1000"

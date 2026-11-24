@@ -7,6 +7,12 @@ import SwiftUI
 
 enum Scenarier {
     static var projekt = URL(fileURLWithPath: "/")
+    static var svarFore: Data?
+    static var tradarFore = 0
+    static var kommentarerKlara = false
+    static var delaSvar: Result<DelningSkapad, Error>?
+    static var delaLista: Result<[Delning], Error>?
+    static var delaHoppa = false
     static func laddat() -> Bool {
         guard let (_, c) = vy() else { return false }
         return run.parts.count >= 4 && c.leaves.count >= 7 && !run.rebuilding
@@ -417,6 +423,80 @@ enum Scenarier {
             kolla(Runner.tolkaTal("M3") == nil && Runner.tolkaTal("2 x 4") == nil, "text som inte är ett tal ska avvisas")
             kolla(ParamStyle.format(22.5, unit: "°") == "22,5", "22,5° ska visas 22,5, inte \(ParamStyle.format(22.5, unit: "°"))")
             kolla(ParamStyle.format(0.125, unit: "mm") == "0,125" && ParamStyle.format(12.5, unit: "mm") == "12,50", "mm-visning")
+        }]),
+
+        s("Kommentarer från delning: trasig post hoppar över, inget till Claude", [.gor {
+            let cad = projekt.appendingPathComponent("cad")
+            svarFore = try? Data(contentsOf: cad.appendingPathComponent("svar.json"))
+            tradarFore = run.chatThreads(closedLocal: []).threads.count
+            try? JSONSerialization.data(withJSONObject: ["kommentarer": [
+                ["id": "k1", "tid": "2026-11-24T10:00:00.000+01:00", "text": "Hålet i locket är för litet", "punkt": [1.0, 2.0, 3.0],
+                 "del": "lock", "kropp": 0, "delning": "D1", "fran": "Anna", "mottagen": "2026-11-24T11:00:00.000+01:00"],
+                ["id": "k2", "tid": "2026-11-24T10:05:00.000+01:00", "text": 42, "delning": "D1"],          // trasig: text är inte text
+                "skräp",                                                                                      // trasig: ingen post
+                ["id": "k3", "tid": "2026-11-24T10:10:00.000+01:00", "text": "Snygg låda", "punkt": ["a", 2, 3],  // punkten kan inte läsas
+                 "del": "lada", "delning": "D1", "fran": "Bo"],
+                ["id": "k4", "text": "Utan tid och plats", "delning": "D2", "framtida_falt": true]]])
+                .write(to: cad.appendingPathComponent("kommentarer.json"))
+            kommentarerKlara = false
+            run.laddaKommentarer { kommentarerKlara = true }
+        }, .tills("kommentarerna lästa", 20) { kommentarerKlara }, .gor {
+            kolla(Runner.kommentarerFranFil(projekt).count == 3, "reserven (filen direkt) ska läsa 3 av 5 poster: \(Runner.kommentarerFranFil(projekt).count)")
+            let k = run.delKommentarer
+            kolla(k.count == 3, "3 läsbara kommentarer ska visas, inte \(k.count): \(k.map(\.text))")
+            kolla(Set(k.map(\.text)) == ["Hålet i locket är för litet", "Snygg låda", "Utan tid och plats"], "fel kommentarer: \(k.map(\.text))")
+            kolla(k.first { $0.kid == "k3" }?.punkt == nil, "en oläslig punkt ska bli ingen punkt, inte en trasig")
+            kolla(k.first?.kid == "k3", "nyaste först: \(k.map { $0.kid ?? "-" })")
+            guard let k1 = k.first(where: { $0.kid == "k1" }) else { kolla(false, "k1 saknas"); return }
+            run.visaKommentar(k1)
+            kolla(run.kommentarNal == k1.id, "klick ska visa kommentarens nål")
+            kolla(run.selectedPart == "lock", "klick ska välja delen: \(run.selectedPart ?? "ingen")")
+            kolla(run.kommentarMarks.first?.pos == [1, 2, 3] && run.kommentarMarks.count == 1, "nålen ska stå i kommentarens punkt: \(run.kommentarMarks)")
+            kolla(run.pekpunkter.isEmpty, "kommentarens nål ska inte bli en pekpunkt (som följer med nästa meddelande till Claude)")
+        }, .vanta(0.8), .gor {
+            let cad = projekt.appendingPathComponent("cad")
+            let texter = ["Hålet i locket är för litet", "Snygg låda", "Utan tid och plats"]
+            let tradar = run.chatThreads(closedLocal: []).threads
+            kolla(tradar.count == tradarFore, "kommentarer ska inte bli chattrådar: \(tradarFore) → \(tradar.count)")
+            kolla(!tradar.contains { th in th.entries.contains { e in texter.contains { e.text.contains($0) } } }, "kommentarer ska inte finnas i chatten")
+            kolla(!run.answers.contains { a in texter.contains { a.svar.contains($0) } }, "kommentarer ska inte finnas bland svaren")
+            kolla((try? Data(contentsOf: cad.appendingPathComponent("svar.json"))) == svarFore, "svar.json ska vara orörd")
+            run.visaKommentar(run.delKommentarer.first { $0.kid == "k1" }!)
+            kolla(run.kommentarNal == nil && run.kommentarMarks.isEmpty, "klick igen ska ta bort nålen")
+        }]),
+
+        s("Dela modell: Skapa länk ger en delning (hoppar över utan motoranropen)", [.gor {
+            delaSvar = nil; delaHoppa = false; delaLista = nil
+            run.skapaDelning(med: [], fran: "Testare") { delaSvar = $0 }
+        }, .tills("svar från motorn på /v1/dela", 90) { delaSvar != nil }, .gor {
+            switch delaSvar! {
+            case .failure(let e) where Runner.felText(e).contains("okänt anrop"):
+                delaHoppa = true
+                print("    (hoppar över: motorn har inte /v1/dela än – \(Runner.felText(e)))")
+            case .failure(let e):
+                kolla(false, "Skapa länk misslyckades: \(Runner.felText(e))")
+                delaHoppa = true
+            case .success(let d):
+                kolla(!d.id.isEmpty, "delningen ska ha ett id")
+                kolla(d.kopieras?.contains("#d=\(d.id)&k=") == true, "länken ska innehålla id och nyckel: \(d.kopieras ?? "-")")
+                kolla(d.baraLokal, "utan inställningar finns ingen publiceringsplats – bara den lokala länken: \(d.lank ?? "-")")
+                kolla(d.lokalLank?.hasPrefix("http://127.0.0.1:") == true, "lokal_lank ska gå till motorn: \(d.lokalLank ?? "-")")
+                kolla(finns(TMP.appendingPathComponent("delat/d/\(d.id).skd")), "paketet ska ligga i testets delat-mapp (inte i Skanna-hemmet)")
+                run.hamtaDelningar { delaLista = $0 }
+            }
+        }, .tills("projektets delningar", 20) { delaHoppa || delaLista != nil }, .gor {
+            guard !delaHoppa, case .success(let d)? = delaSvar else { return }
+            let lista = (try? delaLista?.get()) ?? []
+            kolla(lista.contains { $0.id == d.id && !$0.aterkallad && $0.med.isEmpty }, "delningen ska finnas i listan: \(lista.map(\.id))")
+            kolla(run.harDelningar, "cad/delningar.json ska finnas")
+            delaLista = nil
+            run.aterkallaDelning(d.id) { _ in run.hamtaDelningar { delaLista = $0 } }
+        }, .tills("sluta dela", 20) { delaHoppa || delaLista != nil }, .gor {
+            guard !delaHoppa, case .success(let d)? = delaSvar else { return }
+            let lista = (try? delaLista?.get()) ?? []
+            kolla(lista.first { $0.id == d.id }?.aterkallad == true, "delningen ska vara återkallad")
+            kolla(!finns(TMP.appendingPathComponent("delat/d/\(d.id).skd")), "paketet ska vara borttaget")
+            kolla(run.answers.isEmpty || !run.answers.contains { $0.svar.contains(d.id) }, "delningen ska inte skrivas i svar.json")
         }]),
 
         Scenario(namn: "Vykubens sidor", steg: [.gor {

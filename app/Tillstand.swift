@@ -142,6 +142,11 @@ final class Runner: ObservableObject {
     @Published var gitLage: GitLage = .okand
     @Published var historik: [HistorikPost] = []
     @Published var visaHistorik = false
+
+    // MARK: Delning och kommentarer från delning (Dela.swift) – kommentarerna skickas aldrig till Claude
+    @Published var visaDela = false
+    @Published var delKommentarer: [DelKommentar] = []
+    @Published var kommentarNal: String?                // kommentaren vars punkt visas som nål i 3D-vyn
     var historikNamn: [String] = []      // vad som ändrats sedan senaste commit (blir rubriken)
     var historikSenast: String?          // git status vid förra varvet – commit först när den legat still
     var historikUpptagen = false
@@ -218,6 +223,7 @@ final class Runner: ObservableObject {
         reloadCad()
         uppdateraGitLage()
         startKanslighet()
+        kommentarerVidOppning()
     }
 
     // MARK: Lokalt tillstånd (användarens mått och stängda frågor)

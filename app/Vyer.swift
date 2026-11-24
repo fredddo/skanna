@@ -22,6 +22,7 @@ struct ContentView: View {
         .overlay(alignment: .bottom) { ToastView(run: run) }
         .sheet(isPresented: $run.showNewProject) { NewProjectSheet(run: run) }
         .sheet(isPresented: $run.showShortcuts) { ShortcutsSheet() }
+        .sheet(isPresented: $run.visaDela) { DelaVy(run: run) }
         .onAppear {
             run.refreshScans()
             if !UserDefaults.standard.bool(forKey: "harSettValkommen") {

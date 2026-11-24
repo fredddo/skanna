@@ -21,6 +21,9 @@ struct SkannaApp: App {
                 Button("Importera foton …") { run.importPhotos() }.keyboardShortcut("i", modifiers: [.command, .shift])
                 Divider()
                 Button("Öppna projekt …") { run.openOther() }.keyboardShortcut("o")
+                Divider()
+                Button("Dela modell …") { run.visaDela = true }.keyboardShortcut("d", modifiers: [.command, .shift]).disabled(run.output == nil)
+                Button("Ta emot svarslänk …") { run.taEmotSvarslankDialog() }.disabled(run.output == nil)
             }
             CommandGroup(replacing: .undoRedo) {
                 Button(run.undoName.map { "Ångra \($0)" } ?? "Ångra") { run.undoCommand(redo: false) }.keyboardShortcut("z")

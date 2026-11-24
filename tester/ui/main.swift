@@ -14,6 +14,10 @@ let env = ProcessInfo.processInfo.environment
 let FIXTUR = URL(fileURLWithPath: env["SKANNA_TESTFIXTUR"]!)
 let TMP = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("skanna-ui-\(getpid())")
 try? FileManager.default.createDirectory(at: TMP, withIntermediateDirectories: true)
+// Delningar i testerna: egen delat-mapp och inga inställningar (ingen publiceringsplats, ingen riktig brevlåda).
+// Sätts före första motoranropet – motorn ärver miljön när den startas.
+setenv("SKANNA_DELAT", TMP.appendingPathComponent("delat").path, 1)
+setenv("SKANNA_DELNING_INST", TMP.appendingPathComponent("delning-saknas.json").path, 1)
 let run = Runner()
 let win = NSWindow(contentRect: NSRect(x: -4000, y: 0, width: 1440, height: 880), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
 win.contentView = NSHostingView(rootView: ContentView(run: run).frame(width: 1440, height: 880))

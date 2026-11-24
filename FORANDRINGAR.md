@@ -6,6 +6,12 @@ och mallar ligger i `~/git/worldforge/local/skanna-v2/`. Den vanliga appen, `loc
 tillfällig mapp.
 
 ## Kort
+- **Dela modell (24 nov, steg 3 i `PLAN-webbvisare.md`):** Arkiv → "Dela modell …" (⌘⇧D) skapar en hemlig länk via
+  motorn och kopierar den. CAD-delarna delas; skanningen och nätdelar bara om du kryssar i dem. Bladet säger när ingen
+  publiceringsplats är inställd (då finns bara en lokal förhandsvisning) och listar projektets delningar med "Kopiera
+  länk", "Öppna" och "Sluta dela". Besökarnas kommentarer hämtas ur brevlådan när projektet öppnas eller med "Hämta
+  kommentarer", eller tas emot som svarslänk (Arkiv → "Ta emot svarslänk …"). De visas i Samtal under "Kommentarer
+  från delning" – klick väljer delen och visar platsen som en nål – och skickas aldrig till Claude.
 - **Skanna-motorn (24 nov, steg 1 i `PLAN-motor.md`):** appen startar en liten lokal tjänst (`motor/`, Python i
   Skanna-hemmet) och skickar meddelanden, mått, fillet/fas, utskriftsinställningar, ångra och byggen genom den. Allt
   skrivs atomiskt under projektets lås, och ett bygge i taget per projekt (appens och Claudes byggen väntar på varandra).

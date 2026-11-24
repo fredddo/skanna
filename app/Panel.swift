@@ -389,6 +389,7 @@ struct SamtalVy: View {
                         .frame(width: 560, height: 360)
                 }
             }
+            KommentarerFranDelning(run: run)
             ChattPanel(run: run)
         }
     }
