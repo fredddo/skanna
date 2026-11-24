@@ -817,7 +817,7 @@ struct ModelView: NSViewRepresentable {
         v.onItemDragEnd = { [weak coord = context.coordinator] in
             if coord?.handtagDrag != nil { coord?.endHandtagDrag() } else { coord?.endItemDrag() }
         }
-        v.onDoubleClick = { [weak coord = context.coordinator] p in coord?.itemReset(p) ?? false }
+        v.onDoubleClick = { [weak coord = context.coordinator] p in coord?.dubbelklick(p) ?? false }
         v.onDrawBegin = { [weak coord = context.coordinator] p, f in coord?.ritBorja(p, f) ?? false }
         v.onDrawMove = { [weak coord = context.coordinator] p, f in coord?.ritDra(p, f) }
         v.onDrawEnd = { [weak coord = context.coordinator] p in coord?.ritSlut(p) }

@@ -21,7 +21,8 @@ struct ObjektPanel: View {
                 addMenu
             }
             .padding(.bottom, 4)
-            ScrollIfNeeded(rows: run.parts.count + run.underObjekt.values.reduce(0) { $0 + $1.count } / 2 + (run.model != nil ? 1 : 0), limit: 12) {
+            ScrollIfNeeded(rows: run.parts.count + run.underObjekt.values.reduce(0) { $0 + $1.count } / 2 + (run.model != nil ? 1 : 0), limit: 12,
+                           mal: run.valdRad()) {
                 VStack(alignment: .leading, spacing: 1) {
                     // delar med "foralder" visas under föräldern (inte på egen rad på toppnivå)
                     let ids = Set(run.parts.map(\.id))
@@ -228,6 +229,7 @@ struct ObjektPanel: View {
         var grenar: [String] = []
         for s in inom where s.grupp.count > d && !grenar.contains(s.grupp[d]) { grenar.append(s.grupp[d]) }
         let blad = inom.filter { $0.grupp.count == d }
+        let rad = run.valdRad(), stig = run.valdStig()
         return AnyView(VStack(spacing: 0) {
             ForEach(grenar, id: \.self) { g in
                 let gs = sti + [g]
@@ -251,7 +253,9 @@ struct ObjektPanel: View {
                     }.buttonStyle(.plain).foregroundStyle(synlig ? Color.primary : Color.secondary).tips(synlig ? "Släck gruppen" : "Tänd gruppen")
                 }
                 .padding(.vertical, 3).padding(.horizontal, 4).padding(.leading, indent)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Color.accentColor.opacity(rad == nyckel ? 0.2 : (stig.contains(nyckel) ? 0.07 : 0))))
                 .contentShape(Rectangle())
+                .id(nyckel)
                 .onTapGesture { if ute { run.utfallda.remove(nyckel) } else { run.utfallda.insert(nyckel) } }
                 .tips("\(g)\n\(kroppar.count) kroppar\n\nKlicka för att fälla ut/ihop · ögat tänder/släcker hela gruppen")
                 .contextMenu {
@@ -282,7 +286,9 @@ struct ObjektPanel: View {
     private func row<Extra: View>(id: String, name: String, sub: String?, color: Color, icon: String?, indent: CGFloat, renamable: Bool = false,
                                   @ViewBuilder extra: () -> Extra) -> some View {
         let on = !run.hidden.contains(id)
-        let selected = run.selectedPart == id || run.traff?.objekt == id
+        let rad = run.valdRad()
+        let selected = rad == id
+        let iStig = !selected && rad != nil && run.valdStig().contains(id)
         return HStack(spacing: 6) {
             if let icon { Image(systemName: icon).foregroundStyle(.secondary).frame(width: 12) }
             else { Circle().fill(color).frame(width: 11, height: 11) }
@@ -308,8 +314,9 @@ struct ObjektPanel: View {
                 .buttonStyle(.plain).foregroundStyle(on ? Color.primary : Color.secondary).tips(on ? "Släck" : "Tänd")
         }
         .padding(.vertical, 3).padding(.horizontal, 4).padding(.leading, indent)
-        .background(RoundedRectangle(cornerRadius: 5).fill(selected ? Color.accentColor.opacity(0.2) : Color.clear))
+        .background(RoundedRectangle(cornerRadius: 5).fill(Color.accentColor.opacity(selected ? 0.2 : (iStig ? 0.07 : 0))))
         .contentShape(Rectangle())
+        .id(id)
         .onTapGesture { run.selectPart(id) }
         .tips((sub.map { "\(name)\n\($0)\n\n" } ?? "")
               + (renamable ? "Klicka för att välja och se hela texten · dubbelklicka på namnet för att byta namn · dra för att flytta i listan · ögat tänder/släcker"
@@ -321,33 +328,41 @@ struct ObjektPanel: View {
 struct ScrollIfNeeded<C: View>: View {
     let rows: Int
     let limit: Int
+    var mal: String? = nil              // raden (.id) som ska synas – rullas fram när den ändras
     @ViewBuilder var content: () -> C
     var body: some View {
-        if rows > limit { TunnRullning(hojd: 420) { content() } } else { content() }
+        if rows > limit { TunnRullning(hojd: 420, mal: mal) { content() } } else { content() }
     }
 }
 
 /// Rullning med en tunn linje längs högerkanten i stället för macOS-rullningslisten (som lägger sig över ögonen).
 struct TunnRullning<C: View>: View {
     let hojd: CGFloat
+    var mal: String? = nil
     @ViewBuilder var content: () -> C
     @State private var geo = CGRect.zero          // y = hur långt ner, height = innehållets höjd
     var body: some View {
-        ScrollView { content().padding(.trailing, 5) }
-            .scrollIndicators(.never)
-            .onScrollGeometryChange(for: CGRect.self) { g in
-                CGRect(x: 0, y: g.contentOffset.y, width: 0, height: g.contentSize.height)
-            } action: { _, ny in geo = ny }
-            .frame(height: hojd)
-            .overlay(alignment: .topTrailing) {
-                if geo.height > hojd {
-                    let del = hojd / geo.height
-                    let h = max(24, hojd * del)
-                    let y = min(hojd - h, max(0, geo.minY / max(1, geo.height - hojd) * (hojd - h)))
-                    Capsule().fill(Color.secondary.opacity(0.45)).frame(width: 2, height: h)
-                        .offset(x: -1, y: y).allowsHitTesting(false)
+        ScrollViewReader { proxy in
+            ScrollView { content().padding(.trailing, 5) }
+                .scrollIndicators(.never)
+                .onScrollGeometryChange(for: CGRect.self) { g in
+                    CGRect(x: 0, y: g.contentOffset.y, width: 0, height: g.contentSize.height)
+                } action: { _, ny in geo = ny }
+                .onChange(of: mal) { _, m in
+                    // scrollTo utan ankare rullar minsta möjliga – syns raden redan händer inget
+                    if let m { withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(m) } }
                 }
+        }
+        .frame(height: hojd)
+        .overlay(alignment: .topTrailing) {
+            if geo.height > hojd {
+                let del = hojd / geo.height
+                let h = max(24, hojd * del)
+                let y = min(hojd - h, max(0, geo.minY / max(1, geo.height - hojd) * (hojd - h)))
+                Capsule().fill(Color.secondary.opacity(0.45)).frame(width: 2, height: h)
+                    .offset(x: -1, y: y).allowsHitTesting(false)
             }
+        }
     }
 }
 

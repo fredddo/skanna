@@ -20,6 +20,10 @@ tillfällig mapp.
     ett tal avvisas;
   - testinstansen (`bygg-beta.sh --test`) ser bara sina kopior, inte de riktiga skanningarna i Hämtade filer;
   - byggen fungerar också när terminalen saknar UTF-8 (å/ä/ö i delar.json).
+- **Valt objekt syns i objektpanelen:** klickar du på ett objekt i 3D-vyn markeras dess rad i panelen utan att trädet
+  fälls ut. Ligger objektet i en ihopfälld del eller komponentgrupp markeras den raden (nivåerna ovanför får en svag
+  markering), och listan rullar fram till raden. Dubbelklick på objektet fäller ut trädet ner till det (i sprängvyn dras
+  de utfällda nivåerna då isär var för sig). Dubbelklick på tomma ytan visar som förut hela modellen.
 - **Objektpanelens bredd går att ändra:** dra i panelens högerkant (200–640 punkter, sparas); dubbelklicka på kanten
   för standardbredd.
 - **Komponentträd för importerad STEP:** kropparna visas under sina komponenter som i Fusion (t.ex. fjäderpaket →

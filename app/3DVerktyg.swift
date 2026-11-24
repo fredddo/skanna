@@ -738,6 +738,17 @@ extension ModelView.Coordinator {
         root.addChildNode(axelLinje)
     }
 
+    /// Dubbelklick: i Flytta läggs objektet tillbaka; annars fälls objektträdet ut ner till det valda objektet.
+    /// false (tomma ytan, eller inget valt där) = hela modellen som förut.
+    func dubbelklick(_ p: NSPoint) -> Bool {
+        if itemReset(p) { return true }
+        // klicket före dubbelklicket har redan valt objektet (Välj/Flytta); i Mät/Peka finns inget val att fälla ut till
+        guard let run, let h = visibleHits(p).first, let id = leafID(of: h.node), let leaf = leaves[id],
+              run.traff?.objekt == id || (run.traff?.del == leaf.del && !leaf.multi) else { return false }
+        run.fallUtTillValt()
+        return true
+    }
+
     /// Dubbelklick på ett objekt i Flytta: tillbaka till sin plats. Returnerar om klicket togs om hand.
     func itemReset(_ p: NSPoint) -> Bool {
         guard tool == .flytta, let run else { return false }

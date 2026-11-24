@@ -138,6 +138,34 @@ enum Scenarier {
             },
         ]),
 
+        s("Valt objekt syns i objektträdet utan att det fälls ut; dubbelklick fäller ut", [
+            .gor { run.utfallda = []; run.selectedPart = nil; run.traff = nil }, .vanta(0.3), .gor {
+                guard let (_, c) = vy(), let fot = c.leaves.values.first(where: { $0.del == "fotter" && $0.multi }) else { kolla(false, "ingen fot"); return }
+                c.selectObject(fot, pos: fot.center)
+                kolla(run.valdRad() == "fotter", "hopfälld del: delens rad ska markeras, är \(run.valdRad() ?? "nil")")
+                kolla(run.utfallda.isEmpty, "ett klick får inte fälla ut trädet")
+                // komponentgrupp som i en importerad STEP: foten ligger i A/B
+                let original = run.underObjekt["fotter"]
+                defer { run.underObjekt["fotter"] = original }
+                if var subs = original, let i = subs.firstIndex(where: { $0.id == fot.id }) {
+                    subs[i].grupp = ["A", "B"]; run.underObjekt["fotter"] = subs
+                }
+                run.utfallda = ["fotter"]
+                kolla(run.valdRad() == UnderObjekt.gruppNyckel("fotter", ["A"]), "ihopfälld grupp A ska markeras")
+                run.utfallda = []
+                run.fallUtTillValt()
+                kolla(run.valdRad() == fot.id, "efter dubbelklick ska kroppens rad synas, är \(run.valdRad() ?? "nil")")
+                kolla(run.utfallda == ["fotter", UnderObjekt.gruppNyckel("fotter", ["A"]), UnderObjekt.gruppNyckel("fotter", ["A", "B"])],
+                      "dubbelklick fäller ut delen och grupperna ner till kroppen")
+            },
+            .gor { run.utfallda = []; run.traff = nil; run.selectedPart = "insats" }, .vanta(0.3), .gor {
+                kolla(run.valdRad() == "lada", "underdel under hopfälld låda: lådans rad ska markeras, är \(run.valdRad() ?? "nil")")
+                run.fallUtTillValt()
+                kolla(run.valdRad() == "insats", "efter utfällning ska insatsens rad markeras")
+            },
+            .gor { run.utfallda = []; run.traff = nil; run.selectedPart = nil }, .vanta(0.3),
+        ]),
+
         s("Sprängvy håller ihop hopfällda delar", [
             .gor { run.explode = 1 }, .vanta(0.8), .gor {
                 guard let (_, c) = vy() else { return }

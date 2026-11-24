@@ -538,7 +538,7 @@ struct ShortcutsSheet: View {
             ("D, dra", "Rita – starten fäster mot kanter"), ("⇧", "Rak linje"), ("Mellanslag + dra", "Vrid vyn medan du ritar"),
             ("Esc", "Kasta ritningen")]),
         ("Vy", "cube", [
-            ("⌘0 · dubbelklick", "Hela modellen"), ("Z", "Zooma in på det valda (vyn vrider runt det valda)"), ("⌘1 … ⌘6", "Topp, fram, höger, bak, vänster, botten"), ("⌘7", "Perspektiv"),
+            ("⌘0 · dubbelklick på tomt", "Hela modellen"), ("Dubbelklick på objekt", "Fäll ut objektträdet till det"), ("Z", "Zooma in på det valda (vyn vrider runt det valda)"), ("⌘1 … ⌘6", "Topp, fram, höger, bak, vänster, botten"), ("⌘7", "Perspektiv"),
         ] + (Styrning.styrplatta
              ? [("Två fingrar", "Vrid (⇧: flytta vyn)"), ("Klicka och dra", "Flytta vyn (⌥/⇧: vrid)"), ("Nyp", "Zooma mot pekaren")]
              : [("Dra", "Vrid"), ("⌥-dra · högerdra", "Flytta vyn"), ("Nyp · skrolla", "Zooma mot pekaren")]) + [

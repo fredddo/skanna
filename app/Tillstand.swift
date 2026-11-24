@@ -387,6 +387,39 @@ final class Runner: ObservableObject {
 
     func selectPart(_ id: String?) { selectedPart = (id == selectedPart) ? nil : id }
 
+    /// Raderna i objektträdet från toppen ner till det valda: delen (och dess föräldradelar), komponentgrupperna, kroppen.
+    /// Nycklarna är samma som i utfallda (del-id, gruppNyckel) och sist kroppens id.
+    func valdStig() -> [String] {
+        guard let del = traff?.del ?? selectedPart else { return [] }
+        let base = del.split(separator: "#").first.map(String.init) ?? del
+        var delar = [base]
+        var seen: Set<String> = [base]
+        while let f = parts.first(where: { $0.id == delar[0] })?.foralder, !seen.contains(f), parts.contains(where: { $0.id == f }) {
+            delar.insert(f, at: 0); seen.insert(f)
+        }
+        guard let obj = traff?.objekt, obj != base, let s = underObjekt[base]?.first(where: { $0.id == obj }), (underObjekt[base]?.count ?? 0) > 1
+        else { return delar }
+        let grupper = s.grupp.indices.map { UnderObjekt.gruppNyckel(base, Array(s.grupp.prefix($0 + 1))) }
+        return delar + grupper + [obj]
+    }
+
+    /// Den rad i objektträdet som visar det valda just nu: den djupaste i valdStig som inte ligger under en ihopfälld nivå.
+    func valdRad() -> String? {
+        let stig = valdStig()
+        guard var rad = stig.first else { return nil }
+        for k in stig.dropFirst() {
+            guard utfallda.contains(rad) else { break }
+            rad = k
+        }
+        return rad
+    }
+
+    /// Fäll ut objektträdet ner till det valda (dubbelklick i 3D-vyn).
+    func fallUtTillValt() {
+        let stig = valdStig()
+        for k in stig.dropLast() where !utfallda.contains(k) { utfallda.insert(k) }
+    }
+
     /// Delens färg enligt valt färgschema (index i delar.json), eller skriptets egen färg.
     func color(for p: PartInfo) -> NSColor {
         let own = NSColor(hex: p.farg) ?? .systemOrange
