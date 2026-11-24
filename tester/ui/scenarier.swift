@@ -375,6 +375,13 @@ enum Scenarier {
             kolla(th?.status == .arbetar, "läst men obesvarad tråd med status arbetar ska visas som arbetar: \(String(describing: th?.status))")
         }]),
 
+        s("Objektpanelens höjd går att dra", [.gor {
+            kolla(HojdHandtag.ny(start: 300, drag: 120) == 420, "dra nedåt ska göra panelen högre")
+            kolla(HojdHandtag.ny(start: 300, drag: -500) == 80, "panelen ska inte bli lägre än 80 punkter")
+            kolla(HojdHandtag.ny(start: 1300, drag: 500) == 1400, "panelen ska inte bli högre än 1400 punkter")
+            kolla(HojdHandtag.standard == 420, "standardhöjden ska vara densamma som förut (420)")
+        }]),
+
         s("Testinstansen ser bara sina egna projekt", [.gor {
             run.refreshScans()
             let hem = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path

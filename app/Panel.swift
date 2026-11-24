@@ -7,9 +7,12 @@ import SwiftUI
 struct ObjektPanel: View {
     @ObservedObject var run: Runner
     var hide: () -> Void
+    /// Listans högsta höjd (dras i panelens underkant, sparas). Kortare innehåll ger en lägre panel.
+    @Binding var listHojd: Double
     @AppStorage("shading") private var scanStyle = 1
     @AppStorage("skanningOppen") private var scanOpen = true
     @State private var dropTarget: String?
+    @State private var listVisad: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -21,8 +24,7 @@ struct ObjektPanel: View {
                 addMenu
             }
             .padding(.bottom, 4)
-            ScrollIfNeeded(rows: run.parts.count + run.underObjekt.values.reduce(0) { $0 + $1.count } / 2 + (run.model != nil ? 1 : 0), limit: 12,
-                           mal: run.valdRad()) {
+            TunnRullning(hojd: CGFloat(listHojd), mal: run.valdRad(), krymp: true, visad: { listVisad = $0 }) {
                 VStack(alignment: .leading, spacing: 1) {
                     // delar med "foralder" visas under föräldern (inte på egen rad på toppnivå)
                     let ids = Set(run.parts.map(\.id))
@@ -71,6 +73,7 @@ struct ObjektPanel: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(.regularMaterial))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.25)))
+        .overlay(alignment: .bottom) { HojdHandtag(hojd: $listHojd, visad: { Double(listVisad) }) }
         .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
     }
 
@@ -324,23 +327,15 @@ struct ObjektPanel: View {
     }
 }
 
-/// ScrollView bara när innehållet är långt – annars blir panelen precis så hög som innehållet.
-struct ScrollIfNeeded<C: View>: View {
-    let rows: Int
-    let limit: Int
-    var mal: String? = nil              // raden (.id) som ska synas – rullas fram när den ändras
-    @ViewBuilder var content: () -> C
-    var body: some View {
-        if rows > limit { TunnRullning(hojd: 420, mal: mal) { content() } } else { content() }
-    }
-}
-
 /// Rullning med en tunn linje längs högerkanten i stället för macOS-rullningslisten (som lägger sig över ögonen).
 struct TunnRullning<C: View>: View {
     let hojd: CGFloat
-    var mal: String? = nil
+    var mal: String? = nil              // raden (.id) som ska synas – rullas fram när den ändras
+    var krymp = false                   // lägre än `hojd` när innehållet är kortare (panelen blir precis så hög som innehållet)
+    var visad: ((CGFloat) -> Void)? = nil   // den höjd som faktiskt visas
     @ViewBuilder var content: () -> C
     @State private var geo = CGRect.zero          // y = hur långt ner, height = innehållets höjd
+    var synlig: CGFloat { krymp && geo.height > 0 ? min(hojd, geo.height) : hojd }
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView { content().padding(.trailing, 5) }
@@ -353,9 +348,11 @@ struct TunnRullning<C: View>: View {
                     if let m { withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(m) } }
                 }
         }
-        .frame(height: hojd)
+        .frame(height: synlig)
+        .onChange(of: synlig, initial: true) { _, h in visad?(h) }
         .overlay(alignment: .topTrailing) {
-            if geo.height > hojd {
+            if geo.height > synlig {
+                let hojd = synlig
                 let del = hojd / geo.height
                 let h = max(24, hojd * del)
                 let y = min(hojd - h, max(0, geo.minY / max(1, geo.height - hojd) * (hojd - h)))

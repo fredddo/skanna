@@ -24,8 +24,9 @@ tillfällig mapp.
   fälls ut. Ligger objektet i en ihopfälld del eller komponentgrupp markeras den raden (nivåerna ovanför får en svag
   markering), och listan rullar fram till raden. Dubbelklick på objektet fäller ut trädet ner till det (i sprängvyn dras
   de utfällda nivåerna då isär var för sig). Dubbelklick på tomma ytan visar som förut hela modellen.
-- **Objektpanelens bredd går att ändra:** dra i panelens högerkant (200–640 punkter, sparas); dubbelklicka på kanten
-  för standardbredd.
+- **Objektpanelens storlek går att ändra:** dra i panelens högerkant för bredden (200–640 punkter) och i underkanten
+  för höjden; båda sparas, och dubbelklick på kanten ger standardstorleken. En kort lista gör fortfarande panelen
+  lägre än den inställda höjden.
 - **Komponentträd för importerad STEP:** kropparna visas under sina komponenter som i Fusion (t.ex. fjäderpaket →
   Variant B → Tallriksfjädrar → Tallrik 1–11). Varje grupp fälls ut/ihop, har ett öga för hela gruppen och "Visa bara
   den här"; i sprängvyn hålls en hopfälld grupp ihop. Gäller efter nästa bygge av projektet (⌘B).

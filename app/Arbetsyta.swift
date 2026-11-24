@@ -15,6 +15,7 @@ struct Workspace: View {
     @AppStorage("hogerflik") private var rightTab = 0          // 0 samtal, 1 mått, 2 historik
     @AppStorage("visaObjektPanel") private var showTree = true
     @AppStorage("objektPanelBredd") private var objektBredd = 236.0
+    @AppStorage("objektPanelHojd") private var objektHojd = HojdHandtag.standard
     @State private var importMal = false
     @State private var upTick = 0
     @State private var keyMonitor: Any?
@@ -117,7 +118,7 @@ struct Workspace: View {
                 if !run.dolPaneler {
                     HStack(alignment: .top) {
                         if showTree {
-                            ObjektPanel(run: run, hide: { withAnimation { showTree = false } })
+                            ObjektPanel(run: run, hide: { withAnimation { showTree = false } }, listHojd: $objektHojd)
                                 .frame(width: CGFloat(objektBredd))
                                 .overlay(alignment: .trailing) { BreddHandtag(bredd: $objektBredd) }
                                 .transition(.move(edge: .leading).combined(with: .opacity))
@@ -868,5 +869,37 @@ struct BreddHandtag: View {
                 .onEnded { _ in start = nil })
             .onTapGesture(count: 2) { bredd = standard }
             .tips("Dra för att ändra panelens bredd · dubbelklicka för standardbredd")
+    }
+}
+
+/// Handtag i en panels underkant: dra för att ändra listans höjd (sparas), dubbelklicka för standardhöjd.
+/// Dragningen utgår från den höjd som syns (`visad`), så en kort lista svarar direkt även om sparad höjd är större.
+struct HojdHandtag: View {
+    static let standard = 420.0
+    @Binding var hojd: Double
+    var visad: () -> Double = { 0 }
+    var minsta = 80.0, storsta = 1400.0
+    @State private var start: Double?
+    @State private var over = false
+    static func ny(start: Double, drag: Double, minsta: Double = 80, storsta: Double = 1400) -> Double {
+        min(storsta, max(minsta, start + drag))
+    }
+    var body: some View {
+        Rectangle().fill(Color.clear).frame(height: 8).contentShape(Rectangle())
+            .overlay(Capsule().fill(Color.accentColor.opacity(over || start != nil ? 0.6 : 0)).frame(height: 2).padding(.horizontal, 10))
+            .offset(y: 4)
+            .onHover { inne in
+                over = inne
+                if inne { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            }
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { g in
+                    let s = start ?? { let v = visad(); return v > 0 ? min(hojd, v) : hojd }()
+                    start = s
+                    hojd = HojdHandtag.ny(start: s, drag: g.translation.height, minsta: minsta, storsta: storsta)
+                }
+                .onEnded { _ in start = nil })
+            .onTapGesture(count: 2) { hojd = HojdHandtag.standard }
+            .tips("Dra för att ändra panelens höjd · dubbelklicka för standardhöjd")
     }
 }
