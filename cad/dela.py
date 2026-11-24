@@ -410,7 +410,21 @@ def dela(projekt, delat_mapp_=None, bas_url=None, med=(), fran=None) -> dict:
         lista.append(post)
 
     lagring.uppdatera_json(p / "cad" / "delningar.json", andra, {"delningar": []})
-    return {"id": id, "nyckel": nyckel, "fil": str(fil), "lank": lank, "brevlada": paket["brevlada"]}
+    publicerad = _publicera_om_installt(delat_mapp_, inst)
+    return {"id": id, "nyckel": nyckel, "fil": str(fil), "lank": lank, "brevlada": paket["brevlada"],
+            "publicerad": publicerad}
+
+
+def _publicera_om_installt(delat_mapp_, inst):
+    """Publicerar direkt om användaren slagit på `publicera_automatiskt` i inställningarna och delat-mappen är ett
+    git-repo. → True (publicerat), False (inte inställt). Misslyckas publiceringen kastas DelaFel (länken vore död)."""
+    if inst.get("publicera_automatiskt") is not True or not (delat_mapp(delat_mapp_) / ".git").exists():
+        return False
+    try:
+        publicera(delat_mapp_)
+    except DelaFel as e:
+        raise DelaFel(f"Delningen är sparad men kunde inte publiceras ({e}). Försök igen med dela.py --publicera.", 502) from e
+    return True
 
 
 def delningar(projekt):
@@ -450,6 +464,10 @@ def aterkalla(projekt, delat_mapp_=None, id=None) -> dict:
                 ut["post"] = x
 
     lagring.uppdatera_json(p / "cad" / "delningar.json", andra, {"delningar": []})
+    try:
+        _publicera_om_installt(delat_mapp_, inst)
+    except DelaFel as e:
+        varning = "; ".join(x for x in (varning, f"filen är borttagen här men inte på webbplatsen: {e}") if x)
     return {"id": id, "aterkallad": ut["post"]["aterkallad"], "varning": varning}
 
 

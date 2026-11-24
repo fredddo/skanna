@@ -231,6 +231,17 @@ class Paket(unittest.TestCase):
         self.assertEqual(git("rev-list", "--count", "main", i=fjarr), "1")
         self.assertNotIn(r["id"], git("ls-tree", "-r", "--name-only", "main", i=fjarr))
         self.assertEqual(dela.publicera(), "inget nytt att publicera")
+        # utan inställningen publiceras inget av sig självt; med den publicerar dela() och aterkalla() direkt
+        r2 = dela.dela(self.p)
+        self.assertFalse(r2["publicerad"])
+        self.assertNotIn(r2["id"], git("ls-tree", "-r", "--name-only", "main", i=fjarr))
+        self.env.inst.write_text(json.dumps({"bas_url": "https://exempel.test/skanna/", "publicera_automatiskt": True}))
+        r3 = dela.dela(self.p)
+        self.assertTrue(r3["publicerad"])
+        self.assertIn(r3["id"], git("ls-tree", "-r", "--name-only", "main", i=fjarr))
+        dela.aterkalla(self.p, None, r3["id"])
+        self.assertNotIn(r3["id"], git("ls-tree", "-r", "--name-only", "main", i=fjarr))
+        self.assertEqual(git("rev-list", "--count", "main", i=fjarr), "1")
 
     def test_svarslank_till_kommentarer_utan_dubbletter(self):
         r = dela.dela(self.p)
@@ -473,10 +484,16 @@ class MotorDela(unittest.TestCase):
         kod, (h, _) = self.anrop("GET", "/delat", nyckel=None, ra=True)
         self.assertIn(kod, (200, 404))   # urllib följer omdirigeringen till /delat/ (ingen index.html → 404)
 
+    def test_publicera_utan_git_repo_ger_fel(self):
+        kod, svar = self.anrop("POST", "/v1/dela/publicera", {})
+        self.assertNotEqual(kod, 200)
+        self.assertIn("git-repo", json.dumps(svar, ensure_ascii=False))
+
     def test_ovriga_anrop_kraver_nyckel(self):
         for metod, s, kropp in (("POST", "/v1/dela", {"projekt": str(self.p)}), ("GET", f"/v1/delningar?projekt={self.p}", None),
                                 ("POST", "/v1/kommentarer", {"projekt": str(self.p), "lank": "x"}),
                                 ("POST", "/v1/kommentarer/hamta", {"projekt": str(self.p)}),
+                                ("POST", "/v1/dela/publicera", {}),
                                 ("GET", "/v1/halsa", None), ("POST", "/delat/x", {})):
             self.assertEqual(self.anrop(metod, urllib.request.quote(s, safe="/?=&"), kropp, nyckel=None)[0], 401, s)
             self.assertEqual(self.anrop(metod, urllib.request.quote(s, safe="/?=&"), kropp, nyckel="fel")[0], 401, s)

@@ -79,11 +79,12 @@ struct Delning: Identifiable, Equatable {
     }
 }
 
-/// Svaret från POST /v1/dela: {id, lank, lokal_lank}.
+/// Svaret från POST /v1/dela: {id, lank, lokal_lank, publicerad}.
 struct DelningSkapad: Equatable {
     let id: String
     let lank: String?
     let lokalLank: String?
+    var publicerad = false          // motorn publicerade direkt (publicera_automatiskt i delning.json)
 
     /// Ingen publiceringsplats inställd: motorn ger då bara en lokal länk (lank saknas, är samma som lokal_lank eller
     /// pekar på den egna datorn).
@@ -122,6 +123,11 @@ extension Runner {
 
     // Dela
 
+    /// Publicera delat-mappen (användarens uttryckliga val – knappen "Publicera nu").
+    func publiceraDelningar(klar: @escaping (Result<String, Error>) -> Void) {
+        motorBakgrund("POST", "/v1/dela/publicera", kropp: [:], timeout: 120) { r in klar(r.map { $0["resultat"] as? String ?? "" }) }
+    }
+
     func skapaDelning(med: [String], fran: String?, klar: @escaping (Result<DelningSkapad, Error>) -> Void) {
         guard let p = output else { klar(.failure(Motor.Fel(description: "Inget projekt är öppet"))); return }
         let f = fran?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -129,7 +135,8 @@ extension Runner {
                       timeout: 120) { r in
             klar(r.flatMap { s in
                 guard let id = s["id"] as? String else { return .failure(Motor.Fel(description: "motorn svarade utan id")) }
-                return .success(DelningSkapad(id: id, lank: s["lank"] as? String, lokalLank: s["lokal_lank"] as? String))
+                return .success(DelningSkapad(id: id, lank: s["lank"] as? String, lokalLank: s["lokal_lank"] as? String,
+                                              publicerad: s["publicerad"] as? Bool ?? false))
             })
         }
     }
@@ -299,6 +306,8 @@ struct DelaVy: View {
     @State private var delningar: [Delning] = []
     @State private var listFel: String?
     @State private var aterkalla: Delning?
+    @State private var publicerar = false
+    @State private var publiceringsText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -374,8 +383,25 @@ struct DelaVy: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else {
                 Label("Länken är kopierad.", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.callout)
-                Text("Den fungerar för andra när delat-mappen är publicerad (dela.py --publicera) – det görs aldrig automatiskt.")
-                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if s.publicerad {
+                    Text("Publicerad. Det kan ta någon minut innan länken fungerar för andra.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(publiceringsText ?? "Länken fungerar för andra först när delningen är publicerad.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Button(publicerar ? "Publicerar …" : "Publicera nu") {
+                        publicerar = true
+                        run.publiceraDelningar { r in
+                            publicerar = false
+                            switch r {
+                            case .success: publiceringsText = "Publicerad. Det kan ta någon minut innan länken fungerar för andra."
+                            case .failure(let e): publiceringsText = "Kunde inte publicera: " + Runner.felText(e)
+                            }
+                        }
+                    }
+                    .disabled(publicerar)
+                    .tips("Lägger upp de krypterade delningarna och visaren på din publiceringsplats (git push i delat-mappen).")
+                }
             }
             if let l = s.kopieras {
                 Text(l).font(.system(.caption, design: .monospaced)).textSelection(.enabled).lineLimit(3)
@@ -460,8 +486,19 @@ struct DelaVy: View {
     private func slutaDela(_ d: Delning) {
         run.aterkallaDelning(d.id) { r in
             switch r {
-            case .success(let varning): run.toast = "Delningen är borttagen – publicera delat-mappen igen så slutar länken fungera"
-                + (varning.map { " (\($0))" } ?? "")
+            case .success(let varning):
+                // "Sluta dela" ska göra att länken slutar fungera: ta bort filen också på publiceringsplatsen
+                let extra = varning.map { " (\($0))" } ?? ""
+                if Delning.arLokal(d.lank) {
+                    run.toast = "Delningen är borttagen" + extra
+                } else {
+                    run.publiceraDelningar { p in
+                        switch p {
+                        case .success: run.toast = "Delningen är borttagen – länken slutar fungera inom någon minut" + extra
+                        case .failure(let e): run.toast = "Delningen är borttagen här, men inte på webbplatsen: \(Runner.felText(e))" + extra
+                        }
+                    }
+                }
             case .failure(let e): run.toast = "Delningen kunde inte tas bort: \(Runner.felText(e))"
             }
             laddaLista()

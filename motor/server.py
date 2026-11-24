@@ -275,7 +275,13 @@ def dela_post(_q, b):
         raise Fel(400, "fran ska vara text")
     bas = dela.installningar().get("bas_url") or _lokal_bas()
     r = dela.dela(p, None, bas, med, fran)
-    return {"id": r["id"], "lank": r["lank"], "lokal_lank": _lokal_lank(r), "brevlada": r["brevlada"]}
+    return {"id": r["id"], "lank": r["lank"], "lokal_lank": _lokal_lank(r), "brevlada": r["brevlada"],
+            "publicerad": r.get("publicerad", False)}
+
+
+def dela_publicera(_q, _b):
+    """Publicerar delat-mappen (git) – bara när användaren trycker på "Publicera nu"."""
+    return {"resultat": dela.publicera()}
 
 
 def dela_aterkalla(_q, b):
@@ -344,6 +350,7 @@ ROUTES = {
     ("GET", "/v1/vanta"): vanta,
     ("POST", "/v1/dela"): dela_post,
     ("POST", "/v1/dela/aterkalla"): dela_aterkalla,
+    ("POST", "/v1/dela/publicera"): dela_publicera,
     ("GET", "/v1/delningar"): delningar_get,
     ("POST", "/v1/kommentarer"): kommentarer_post,
     ("POST", "/v1/kommentarer/hamta"): kommentarer_hamta,
