@@ -255,6 +255,18 @@ enum ChattText {
 }
 
 /// "15:16" i dag, "i går 15:16", annars "17 nov 15:16".
+/// Trådar som väntar på svar (sista posten är användarens), äldst först – sorterade som tidpunkter, inte som text.
+func obesvaradeTradar(_ active: [ChatThread]) -> [ChatThread] {
+    active.filter { $0.status == .vantar && $0.entries.last?.fromClaude == false }.sorted { tidEfter($1.lastTid, $0.lastTid) }
+}
+
+/// De obesvarade trådarna om den äldsta har väntat längre än `grans` sekunder (annars inga).
+func tystaTradar(_ active: [ChatThread], nu: Date = Date(), grans: TimeInterval = 180) -> [ChatThread] {
+    let o = obesvaradeTradar(active)
+    guard let forsta = o.first, let t = tidDatum(forsta.lastTid), nu.timeIntervalSince(t) > grans else { return [] }
+    return o
+}
+
 func chattTid(_ iso: String) -> String {
     guard iso.count >= 16 else { return "" }
     let dag = String(iso.prefix(10)), klocka = String(iso.dropFirst(11).prefix(5))
@@ -347,16 +359,10 @@ struct ChattPanel: View {
 
     // Claudes övergripande status, tunn rad
     /// Trådar där ditt meddelande ligger sist utan svar, äldsta väntetid först.
-    private func obesvarade(_ active: [ChatThread]) -> [ChatThread] {
-        active.filter { $0.status == .vantar && $0.entries.last?.fromClaude == false }.sorted { $0.lastTid < $1.lastTid }
-    }
     /// Claude har inte svarat på en tid och arbetar inte: troligen lyssnar ingen Claude-chatt just nu.
     private func tystClaude(_ active: [ChatThread]) -> [ChatThread] {
         guard run.claude?.status != "arbetar" || run.claudeTyst else { return [] }
-        let o = obesvarade(active)
-        let f = ISO8601DateFormatter()
-        guard let forsta = o.first, let t = f.date(from: forsta.lastTid), Date().timeIntervalSince(t) > 180 else { return [] }
-        return o
+        return tystaTradar(active)
     }
     private func oppnaClaudesTrad(_ active: [ChatThread]) {
         run.oppnaClaudesTrad()
@@ -413,7 +419,7 @@ struct ChattPanel: View {
                 HStack(spacing: 6) {
                     if run.claudeTyst {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
-                        Text("Claude har inte hörts av sedan \(run.claudeSenast.map { chattTid(ISO8601DateFormatter().string(from: $0).replacingOccurrences(of: "Z", with: "")) } ?? "länge") – kör Claude fortfarande?")
+                        Text("Claude har inte hörts av sedan \(run.claudeSenast.map { chattTid(isoText($0)) } ?? "länge") – kör Claude fortfarande?")
                             .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     } else {
                         if st == "arbetar" { ProgressView().controlSize(.mini) }

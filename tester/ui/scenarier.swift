@@ -375,6 +375,34 @@ enum Scenarier {
             kolla(th?.status == .arbetar, "läst men obesvarad tråd med status arbetar ska visas som arbetar: \(String(describing: th?.status))")
         }]),
 
+        s("Testinstansen ser bara sina egna projekt", [.gor {
+            run.refreshScans()
+            let hem = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+            let skyddade = ["Downloads", "Desktop", "Documents"].map { hem + "/" + $0 + "/" }
+            let riktiga = run.scans.map(\.id.standardizedFileURL.path).filter { p in skyddade.contains { p.hasPrefix($0) } }
+            kolla(!run.scans.isEmpty, "testprojektet ska finnas i listan")
+            kolla(riktiga.isEmpty, "användarens riktiga skanningar (Hämtade filer, Skrivbord, Dokument) ska inte visas: \(riktiga)")
+        }]),
+
+        s("Obesvarade trådar jämförs som tidpunkter (millisekunder, tidszon)", [.gor {
+            let cad = projekt.appendingPathComponent("cad")
+            // två väntande trådar: den äldre har millisekunder och +02:00, den nyare +01:00 – som text sorteras de fel
+            let gammal = "2026-11-20T10:00:00.250+02:00", ny = "2026-11-20T09:30:00+01:00"
+            try? JSONSerialization.data(withJSONObject: ["svar": [
+                ["fraga_id": "meddelande", "fraga": "", "svar": "Nyare fråga", "tid": ny],
+                ["fraga_id": "meddelande", "fraga": "", "svar": "Äldre fråga", "tid": gammal]]])
+                .write(to: cad.appendingPathComponent("svar.json"))
+            try? JSONSerialization.data(withJSONObject: ["status": "väntar", "meddelanden": [] as [Any]])
+                .write(to: cad.appendingPathComponent("claude.json"))
+            run.loadAnswers(); run.reloadCad()
+        }, .vanta(0.3), .gor {
+            let aktiva = run.chatThreads(closedLocal: []).threads
+            let o = obesvaradeTradar(aktiva)
+            kolla(o.count == 2 && o.first?.lastTid == "2026-11-20T10:00:00.250+02:00", "äldsta obesvarade tråden ska komma först: \(o.map(\.lastTid))")
+            kolla(tystaTradar(aktiva).count == 2, "tider med millisekunder ska ge varningen \"lyssnar Claude?\" efter 3 min")
+            kolla(tystaTradar(aktiva, nu: tidDatum("2026-11-20T10:01:00+02:00")!).isEmpty, "efter 1 min ska ingen tråd räknas som tyst")
+        }]),
+
         s("Måttinmatning tolkar minus, komma och grader", [.gor {
             kolla(Runner.tolkaTal("\u{2212}12,5") == -12.5, "−12,5 ska bli −12,5")
             kolla(Runner.tolkaTal("22,5°", enhet: "°") == 22.5, "22,5° ska bli 22,5")
